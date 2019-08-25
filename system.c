@@ -1,4 +1,4 @@
-#include <stm32l476xx.h>
+#include <stm32l433xx.h>
 
 #define nop()  __asm__ __volatile__ ("nop" ::)
 
@@ -51,8 +51,6 @@ void SystemInit() {
   // PORTA Modes
   GPIOA->OSPEEDR = 0xFFFFFFFF; // Port A very high speed
   GPIOA->MODER   = 0xABFEFFEF; // A8 as AF, A2 as UART TX
-  GPIOA->AFR[1]  = 1;          // A8 as TIM1_CH1
-  GPIOA->PUPDR   = 0x64010000; // A8 Pull-up
 
   // Enable USART2 clock
   RCC->APB1ENR1 |= RCC_APB1ENR1_USART2EN;
@@ -66,10 +64,4 @@ void SystemInit() {
   // Enable transmit
   USART2->CR1 |= USART_CR1_TE;
 
-  // TIM1
-  RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
-  TIM1->CCMR1 = 1;
-  TIM1->CCER  = 1|2;
-  TIM1->SMCR  = (5<<4)|4;
-  TIM1->CR1   = 1;
 }

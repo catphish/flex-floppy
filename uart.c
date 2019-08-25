@@ -1,5 +1,5 @@
 #include <stdint.h>
-#include <stm32l476xx.h>
+#include <stm32l433xx.h>
 
 void uart_write_char(uint8_t c) {
   while(!(USART2->ISR & USART_ISR_TXE));
