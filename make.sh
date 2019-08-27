@@ -7,6 +7,8 @@ arm-none-eabi-gcc $CCOPTS -c startup_stm32l433xx.s -o startup_stm32l433xx.o
 arm-none-eabi-gcc $CCOPTS -c system.c -o system.o
 arm-none-eabi-gcc $CCOPTS -c uart.c -o uart.o
 arm-none-eabi-gcc $CCOPTS -c main.c -o main.o
+arm-none-eabi-gcc $CCOPTS -c util.c -o util.o
+arm-none-eabi-gcc $CCOPTS -c usb.c -o usb.o
 arm-none-eabi-gcc $CCOPTS -T STM32L433RCTx_FLASH.ld -Wl,--gc-sections *.o -o main.elf -lm
 arm-none-eabi-objcopy -O binary main.elf main.bin
 rm *.o

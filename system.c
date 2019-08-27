@@ -1,4 +1,5 @@
 #include <stm32l433xx.h>
+#include "util.h"
 
 #define nop()  __asm__ __volatile__ ("nop" ::)
 
@@ -43,14 +44,30 @@ void SystemInit() {
 
   // Enable GPIOA clock
   RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
+  // Enable Power control clock
+  RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
+  // Enable USB clock
+  RCC->APB1ENR1 |= RCC_APB1ENR1_USBFSEN;
+  // CRS Clock eneble
+  RCC->APB1ENR1 |= RCC_APB1ENR1_CRSEN;
+
+  // Enable HSI48
+  RCC->CRRCR |= RCC_CRRCR_HSI48ON;
+  while ((RCC->CRRCR & RCC_CRRCR_HSI48RDY) != RCC_CRRCR_HSI48RDY);
 
   // A2 -> USART2_TX
   GPIOA->AFR[0] &= ~GPIO_AFRL_AFSEL2_Msk;
   GPIOA->AFR[0] |= GPIO_AFRL_AFSEL2_0 | GPIO_AFRL_AFSEL2_1 | GPIO_AFRL_AFSEL2_2;
 
+  // A11-A12 -> USB
+  GPIOA->AFR[1] &= ~GPIO_AFRH_AFSEL11_Msk;
+  GPIOA->AFR[1] |= GPIO_AFRH_AFSEL11_3 | GPIO_AFRH_AFSEL11_1;
+  GPIOA->AFR[1] &= ~GPIO_AFRH_AFSEL12_Msk;
+  GPIOA->AFR[1] |= GPIO_AFRH_AFSEL12_3 | GPIO_AFRH_AFSEL12_1;
+
   // PORTA Modes
   GPIOA->OSPEEDR = 0xFFFFFFFF; // Port A very high speed
-  GPIOA->MODER   = 0xABFEFFEF; // A8 as AF, A2 as UART TX
+  GPIOA->MODER   = 0xEABFFFEF; // A2 as UART TX, A11-A12 USB, A13-14 SWD
 
   // Enable USART2 clock
   RCC->APB1ENR1 |= RCC_APB1ENR1_USART2EN;
@@ -63,5 +80,20 @@ void SystemInit() {
   USART2->CR1 |= USART_CR1_UE;
   // Enable transmit
   USART2->CR1 |= USART_CR1_TE;
+
+  // Enable USB Power
+  PWR->CR2 |= (1<<10);
+  usleep(10);
+
+  // Enable USB
+  USB->CNTR &= ~USB_CNTR_PDWN;
+  usleep(10);
+  USB->CNTR &= ~USB_CNTR_FRES;
+  usleep(10);
+  USB->ISTR = 0;
+  USB->CNTR |= USB_CNTR_RESETM;
+  USB->BCDR |= USB_BCDR_DPPU;
+
+  NVIC->ISER[2] = (1 << (USB_IRQn - 64));
 
 }
