@@ -104,8 +104,6 @@ uint8_t pending_addr = 0;
 
 // Types: 0=Bulk,1=Control,2=Iso,3=Interrupt
 void usb_configure_ep(uint8_t ep, uint8_t type, uint32_t size) {
-  //uart_write_string("USB: Setting up EP!\n");
-
   uint8_t in = ep & 0x80;
   ep &= 0x7f;
 
@@ -131,14 +129,10 @@ void usb_configure_ep(uint8_t ep, uint8_t type, uint32_t size) {
 }
 
 void usb_read(uint8_t ep, uint8_t * buffer, uint32_t len) {
-  //uart_write_string(" USB: Read data: ");
   uint32_t rxBufferAddr = USBBUFTABLE->ep_desc[ep].rxBufferAddr;
   for(int n=0; n<len; n++) {
     buffer[n] = USBBUFRAW[rxBufferAddr+n];
-    //uart_write_int(buffer[n]);
-    //uart_write_string(" ");
   }
-  //uart_write_string("\n");
 }
 
 uint32_t ep_ready(uint32_t ep) {
@@ -146,16 +140,10 @@ uint32_t ep_ready(uint32_t ep) {
 }
 
 void usb_write_packet(uint8_t ep, uint8_t * buffer, uint32_t len) {
-  //uart_write_string(" USB: Write data: ");
   uint32_t txBufferAddr = USBBUFTABLE->ep_desc[ep].txBufferAddr;
   for(int n=0; n<len; n+=2) {
     USBBUFRAW16[(txBufferAddr+n)>>1] = buffer[n] | (buffer[n+1] << 8);
-    //uart_write_int(buffer[n]);
-    //uart_write_string(" ");
-    //uart_write_int(buffer[n+1]);
-    //uart_write_string(" ");
   }
-  //uart_write_string("\n");
   USBBUFTABLE->ep_desc[ep].txBufferCount = len;
 
   // Clear CTR_TX and toggle NAK->VALID
@@ -177,13 +165,8 @@ void handle_setup(uint8_t * packet) {
   uint8_t bmRequestType = packet[0];
   uint8_t bRequest      = packet[1];
   if(bmRequestType == 0x80 && bRequest == 0x06) {
-    //uart_write_string(" USB: GET_DESCRIPTOR ");
     uint8_t descriptor_type = packet[3];
     uint8_t descriptor_idx  = packet[2];
-    //uart_write_int(descriptor_type);
-    //uart_write_string(" ");
-    //uart_write_int(descriptor_idx);
-    //uart_write_string("\n");
 
     if(descriptor_type == 1 && descriptor_idx == 0) {
       usb_write(0, device_descriptor, 18, packet[6]);
@@ -193,12 +176,10 @@ void handle_setup(uint8_t * packet) {
     }
   }
   if(bmRequestType == 0x00 && bRequest == 0x05) {
-    //uart_write_string(" USB: SET_ADDRESS\n");
     pending_addr = packet[2];
     usb_write(0,0,0,0);
   }
   if(bmRequestType == 0x00 && bRequest == 0x09) {
-    //uart_write_string(" USB: SET_CONFIGURATION\n");
     usb_write(0,0,0,0);
   }
 }
@@ -208,8 +189,6 @@ void USB_IRQHandler() {
     USB->ISTR &= ~USB_ISTR_RESET;
     buffer_pointer = 64;
 
-    //uart_write_string("USB: Reset!\n");
-    // Configure endpoint 0 for control
     usb_configure_ep(0, 1, 64);
         
     USB->BTABLE = 0;
@@ -220,18 +199,14 @@ void USB_IRQHandler() {
   }
   
   if(USB->ISTR & USB_ISTR_CTR) {
-    //uart_write_string("USB: Transfer complete\n");
     uint32_t ep = USB->ISTR & 0xf;
     if(USB->ISTR & 0x10) {
       // RX
-      //uart_write_string(" USB: Packet received\n");
       if(USB_EPR(ep) & USB_EP_SETUP) {
-        //uart_write_string(" USB: Processing setup packet\n");
         uint8_t setup_buf[8];
         usb_read(0, setup_buf, 8);
         handle_setup(setup_buf);
       } else {
-        //uart_write_string(" USB: Processing data packet\n");
         uint32_t len = USBBUFTABLE->ep_desc[ep].rxBufferCount & 0x03ff;
         uint8_t data_buf[64];
         usb_read(ep, data_buf, len);
@@ -240,21 +215,17 @@ void USB_IRQHandler() {
       USB_EPR(ep) = (USB_EPR(ep) & 0x078f) | 0x1000;
     } else {
       // TX
-      //uart_write_string(" USB: Packet transmitted\n");
       USB_EPR(ep) = (USB_EPR(ep) & 0x870f);
     }
 
     if(pending_addr) {
-      //uart_write_string(" USB: Updated address\n");
       USB->DADDR = USB_DADDR_EF | pending_addr;
       pending_addr = 0;
     }
   }
 
   if(USB->ISTR) {
-    // uart_write_string("USB: Unknown interrupt: ");
-    // uart_write_int(USB->ISTR);
-    // uart_write_nl();
-    //USB->ISTR = 0;
+    // Shrug
+    USB->ISTR = 0;
   }
 }
