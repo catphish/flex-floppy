@@ -1,0 +1,1 @@
+void floppy_init();

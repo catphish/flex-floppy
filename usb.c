@@ -1,12 +1,44 @@
 #include <stm32l433xx.h>
 #include <stdint.h>
-#include "uart.h"
+#include "util.h"
 #include "usb_private.h"
 #include "usb.h"
+#include "gpio.h"
 
 uint32_t buffer_pointer = 64;
 uint8_t pending_addr = 0;
 uint32_t usb_config_active = 0;
+
+void usb_init() {
+  gpio_port_mode(GPIOA, 11, 2, 10, 0, 0); // A11 AF10
+  gpio_port_mode(GPIOA, 12, 2, 10, 0, 0); // A12 AF10
+
+  // Enable Power control clock
+  RCC->APB1ENR1 |= RCC_APB1ENR1_PWREN;
+  // Enable USB clock
+  RCC->APB1ENR1 |= RCC_APB1ENR1_USBFSEN;
+  // CRS Clock eneble
+  RCC->APB1ENR1 |= RCC_APB1ENR1_CRSEN;
+
+  // Enable HSI48
+  RCC->CRRCR |= RCC_CRRCR_HSI48ON;
+  while ((RCC->CRRCR & RCC_CRRCR_HSI48RDY) != RCC_CRRCR_HSI48RDY);
+
+  // Enable USB Power
+  PWR->CR2 |= (1<<10);
+  usleep(10);
+
+  // Enable USB
+  USB->CNTR &= ~USB_CNTR_PDWN;
+  usleep(10);
+  USB->CNTR &= ~USB_CNTR_FRES;
+  usleep(10);
+  USB->ISTR = 0;
+  USB->CNTR |= USB_CNTR_RESETM;
+  USB->BCDR |= USB_BCDR_DPPU;
+
+  NVIC->ISER[2] |= (1 << (USB_IRQn - 64));
+}
 
 // Types: 0=Bulk,1=Control,2=Iso,3=Interrupt
 void usb_configure_ep(uint8_t ep, uint32_t type, uint32_t size) {
@@ -32,8 +64,6 @@ void usb_configure_ep(uint8_t ep, uint32_t type, uint32_t size) {
   }
 
   USB_EPR(ep) = new_epr;
-  uart_write_int(new_epr);
-  uart_write_string("\n");
 }
 
 uint32_t ep_ready(uint32_t ep) {
@@ -113,16 +143,13 @@ void USB_IRQHandler() {
     buffer_pointer = 64;
 
     usb_configure_ep(0, 1, 64);
-
-    usb_configure_ep(0x81, 3, 64);
-    usb_configure_ep(0x02, 0, 64);
-    usb_configure_ep(0x82, 0, 64);
+    usb_configure_ep(0x81, 0, 64);
+    usb_configure_ep(0x82, 3, 64);
 
     USB->BTABLE = 0;
 
     // Enable the peripheral
     USB->DADDR = USB_DADDR_EF;
-    uart_write_string("RST\n");
   }
 
   if(USB->ISTR & USB_ISTR_CTR) {
