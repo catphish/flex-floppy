@@ -42,7 +42,4 @@ void SystemInit() {
   /* Check clock source */
   while ((RCC->CFGR & RCC_CFGR_SWS_PLL) != RCC_CFGR_SWS_PLL);
 
-  usb_init();
-  floppy_init();
-
 }
