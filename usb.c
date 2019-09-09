@@ -89,7 +89,6 @@ void usb_read(uint8_t ep, uint8_t * buffer, uint32_t len) {
 
 void usb_write_packet(uint8_t ep, uint8_t * buffer, uint32_t len) {
   ep &= 0x7f;
-  while(!ep_ready(ep));
   uint32_t txBufferAddr = USBBUFTABLE->ep_desc[ep].txBufferAddr;
   for(int n=0; n<len; n+=2) {
     USBBUFRAW16[(txBufferAddr+n)>>1] = buffer[n] | (buffer[n+1] << 8);
@@ -103,10 +102,12 @@ void usb_write_packet(uint8_t ep, uint8_t * buffer, uint32_t len) {
 void usb_write(uint8_t ep, uint8_t * buffer, uint32_t len, uint32_t limit_len) {
   if(limit_len < len) len = limit_len;
   while(len > 64) {
+    while(!ep_ready(ep));
     usb_write_packet(ep, buffer, 64);
     len -= 64;
     buffer += 64;
   }
+  while(!ep_ready(ep));
   usb_write_packet(ep, buffer, len);
 }
 

@@ -8,9 +8,7 @@
 void floppy_init() {
   // TIM2
   RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN;
-  TIM2->CCMR2 = 1;
-  TIM2->CCER  = (1<<8) | (1<<9);
-  TIM2->CR1   = 1;
+  NVIC->ISER[0] |= (1 << TIM2_IRQn);
 
   gpio_port_mode(GPIOA, 1, 0, 0, 1, 0);  // A1  READY     IN
   gpio_port_mode(GPIOA, 2, 1, 0, 0, 1);  // A2  HEADSELET OUT
@@ -31,9 +29,9 @@ void floppy_init() {
   gpio_port_mode(GPIOB, 15, 1, 0, 0, 1); // B15 ENABLE    OUT
 }
 
-uint16_t data[16*1024];
-uint32_t data_in_ptr = 0;
-uint32_t data_out_ptr = 0;
+uint16_t data[4096];
+uint16_t data_in_ptr  = 0;
+uint16_t data_out_ptr = 0;
 
 void track_minus() {
   GPIOB->BSRR = (1<<13);
@@ -72,34 +70,31 @@ void floppy_read_track() {
   motor_on();
   track_zero();
 
-  for(int n=0; n<20;n++) usleep(100000);
+  msleep(3000);
 
-  volatile uint32_t previous_t;
+  TIM2->CR1   = 0;
+  TIM2->CCMR2 = 1;
+  TIM2->CCER  = (1<<8) | (1<<9);
+  TIM2->CNT   = 0;
+  TIM2->DIER  = (1<<3);
+  TIM2->EGR   = (1<<3);
+  TIM2->CR1   = 1;
 
-  TIM2->CNT = 0;
-
-  while(!(TIM2->SR & (1<<3)));
-  previous_t = TIM2->CCR3;
-  while(!(TIM2->SR & (1<<3)));
-  previous_t = TIM2->CCR3;
-
-  while(TIM2->CNT < 80000000) {
+  while(TIM2->CNT < 80000000*2) {
     // Wait for a timer value
-    while(!(TIM2->SR & (1<<3)));
-    uint32_t current_t = TIM2->CCR3;
-    data[data_in_ptr] = current_t - previous_t;
-    data_in_ptr++;
-    previous_t = current_t;
-    if(data_in_ptr == 16*1024) data_in_ptr = 0;
-
-    if((data_in_ptr >= data_out_ptr + 32) || (data_in_ptr < data_out_ptr)) {
+    if((data_in_ptr >= (data_out_ptr + 32)) || (data_in_ptr < data_out_ptr)) {
       if(ep_ready(0x81)) {
-        //usb_write(0x81, (unsigned char *)data + data_out_ptr, 64, 64);
-        usb_write(0x81, (unsigned char *)data + data_out_ptr, 64, 64);
+        usb_write_packet(0x81, (unsigned char *)(data+data_out_ptr), 64);
         data_out_ptr = data_out_ptr + 32;
-        if(data_out_ptr == 16*1024) data_out_ptr = 0;
+        if(data_out_ptr == 4096) data_out_ptr = 0;
       }
     }
   }
   motor_off();
+}
+
+void TIM2_IRQHandler() {
+  data[data_in_ptr] = TIM2->CCR3;
+  data_in_ptr++;
+  if(data_in_ptr == 4096) data_in_ptr = 0;
 }

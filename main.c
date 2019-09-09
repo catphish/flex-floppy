@@ -12,5 +12,7 @@ int main() {
 	while(!usb_config_active);
   floppy_init();
 	floppy_read_track();
-	while(1);
+	while(1) {
+
+	}
 }
