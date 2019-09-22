@@ -2,3 +2,4 @@
 
 void floppy_init();
 void floppy_read_track();
+void floppy_handle_usb_request(uint8_t * packet, uint8_t length);

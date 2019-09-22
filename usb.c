@@ -4,6 +4,7 @@
 #include "usb_private.h"
 #include "usb.h"
 #include "gpio.h"
+#include "floppy.h"
 
 uint32_t buffer_pointer = 64;
 uint8_t pending_addr = 0;
@@ -144,8 +145,8 @@ void USB_IRQHandler() {
     buffer_pointer = 64;
 
     usb_configure_ep(0, 1, 64);
-    usb_configure_ep(0x81, 0, 64);
-    usb_configure_ep(0x82, 3, 64);
+    usb_configure_ep(0x01, 0, 64);
+    usb_configure_ep(0x82, 0, 64);
 
     USB->BTABLE = 0;
 
@@ -159,9 +160,12 @@ void USB_IRQHandler() {
       // RX
       uint32_t len = USBBUFTABLE->ep_desc[ep].rxBufferCount & 0x03ff;
       uint8_t rx_buf[64];
-      usb_read(0, rx_buf, len);
+      usb_read(ep, rx_buf, len);
       if(USB_EPR(ep) & USB_EP_SETUP) {
         handle_setup(rx_buf);
+      }
+      if(ep == 1) {
+        floppy_handle_usb_request(rx_buf, len);
       }
     } else {
       // TX

@@ -46,25 +46,25 @@ uint8_t config_descriptor[] = {
   0x00,   /* bInterfaceNumber: Number of Interface */
   0x00,   /* bAlternateSetting: Alternate setting */
   0x02,   /* bNumEndpoints: Endpoints used */
-  0xff,   /* bInterfaceClass: Communication Interface Class */
-  0x00,   /* bInterfaceSubClass: Abstract Control Model */
-  0x00,   /* bInterfaceProtocol: Common AT commands */
+  0xff,   /* bInterfaceClass: Custom */
+  0x00,   /* bInterfaceSubClass: - */
+  0x00,   /* bInterfaceProtocol: - */
   0x00,   /* iInterface: */
 
-/*TX Endpoint Descriptor*/
+/*RX Endpoint Descriptor*/
   0x07,   /* bLength: Endpoint Descriptor size */
   5,   /* bDescriptorType: Endpoint */
-  0x81,   /* bEndpointAddress: (IN1) */
+  0x01,   /* bEndpointAddress: (OUT1) */
   0x02,   /* bmAttributes: Bulk */
   64,     /* wMaxPacketSize: */
   0x00,
   0x00,   /* bInterval: */
-/*Interrupt Endpoint Descriptor*/
+/*TX Endpoint Descriptor*/
   0x07,   /* bLength: Endpoint Descriptor size */
   5,   /* bDescriptorType: Endpoint */
   0x82,   /* bEndpointAddress: (IN2) */
-  0x03,   /* bmAttributes: Interrupt */
+  0x02,   /* bmAttributes: Bulk */
   64,     /* wMaxPacketSize: */
   0x00,
-  0xff,   /* bInterval: */
+  0x00,   /* bInterval: */
 };

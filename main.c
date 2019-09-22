@@ -6,13 +6,20 @@
 
 extern volatile uint32_t usb_config_active;
 
-int main() {
-	gpio_init();
-  usb_init();
-	while(!usb_config_active);
-  floppy_init();
-	floppy_read_track();
-	while(1) {
+volatile uint8_t task;
 
-	}
+int main() {
+  task = 0;
+  gpio_init();
+  usb_init();
+  floppy_init();
+  //while(!usb_config_active);
+
+  while(1) {
+    // Main loop. Run task requested by USB interrupt.
+    if(task == 4) {
+      floppy_read_track();
+      task = 0;
+    }
+  }
 }

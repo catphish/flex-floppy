@@ -5,6 +5,8 @@
 #include "usb.h"
 #include "util.h"
 
+volatile extern uint8_t task;
+
 void floppy_init() {
   // TIM2
   RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN;
@@ -29,24 +31,29 @@ void floppy_init() {
   gpio_port_mode(GPIOB, 15, 1, 0, 0, 1); // B15 ENABLE    OUT
 }
 
-uint16_t data[4096];
+#define MEMORY_SIZE 8192
+uint16_t data[MEMORY_SIZE];
 uint16_t data_in_ptr  = 0;
 uint16_t data_out_ptr = 0;
 
 void track_minus() {
   GPIOB->BSRR = (1<<13);
   GPIOB->BSRR = (1<<(16+12));
-  usleep(100000);
+  msleep(10);
   GPIOB->BSRR = (1<<12);
-  usleep(100000);
+  msleep(10);
 }
 
 void track_plus() {
   GPIOB->BSRR = (1<<(16+13));
   GPIOB->BSRR = (1<<(16+12));
-  usleep(100000);
+  msleep(10);
   GPIOB->BSRR = (1<<12);
-  usleep(100000);
+  msleep(10);
+}
+
+void set_side(uint8_t side) {
+  GPIOA->BSRR = (1 << (16 * side + 2));
 }
 
 void track_zero() {
@@ -58,6 +65,9 @@ void track_zero() {
 void floppy_enable() {
   GPIOB->BSRR = (1<<(16+15)); // Enable
 }
+void floppy_disable() {
+  GPIOB->BSRR = (1<<(15)); // Disable
+}
 void motor_on() {
   GPIOB->BSRR = (1<<(16+14)); // Motor on
 }
@@ -65,12 +75,12 @@ void motor_off() {
   GPIOB->BSRR = (1<<(14)); // Motor off
 }
 
-void floppy_read_track() {
-  floppy_enable();
-  motor_on();
-  track_zero();
+int overflow;
 
-  msleep(3000);
+void floppy_read_track() {
+  data_in_ptr  = 0;
+  data_out_ptr = 0;
+  overflow = 0;
 
   TIM2->CR1   = 0;
   TIM2->CCMR2 = 1;
@@ -80,21 +90,66 @@ void floppy_read_track() {
   TIM2->EGR   = (1<<3);
   TIM2->CR1   = 1;
 
-  while(TIM2->CNT < 80000000*2) {
+  while(TIM2->CNT < 80000000) {
+    if(overflow) {
+      msleep(100);
+      usb_write_packet(0x82, (unsigned char *)"\1", 1);
+      return;
+    }
     // Wait for a timer value
     if((data_in_ptr >= (data_out_ptr + 32)) || (data_in_ptr < data_out_ptr)) {
-      if(ep_ready(0x81)) {
-        usb_write_packet(0x81, (unsigned char *)(data+data_out_ptr), 64);
+      if(ep_ready(0x82)) {
+        usb_write_packet(0x82, (unsigned char *)(data+data_out_ptr), 64);
         data_out_ptr = data_out_ptr + 32;
-        if(data_out_ptr == 4096) data_out_ptr = 0;
+        if(data_out_ptr == MEMORY_SIZE) data_out_ptr = 0;
       }
     }
   }
-  motor_off();
+  TIM2->CR1   = 0;
+
+  // EOF
+  while(!ep_ready(0x82));
+  usb_write_packet(0x82, (unsigned char *)"\0", 1);
+}
+
+uint8_t headpos = 0;
+
+void floppy_handle_usb_request(uint8_t * packet, uint8_t length) {
+  if(packet[0] == 1) {
+    // Enable
+    floppy_enable();
+    motor_on();
+    track_zero();
+    headpos = 0;
+    set_side(0);
+  }
+  if(packet[0] == 2) {
+    // Disable
+    motor_off();
+    floppy_disable();
+  }
+  if(packet[0] == 3) {
+    // Seek
+    uint8_t target_track = packet[1];
+    uint8_t target_headpos = target_track / 2;
+    while(headpos < target_headpos) {
+      track_plus();
+      headpos++;
+    }
+    while(headpos > target_headpos) {
+      track_minus();
+      headpos--;
+    }
+    set_side(target_track % 2);
+  }
+  if(packet[0] == 4) {
+    task = 4;
+  }
 }
 
 void TIM2_IRQHandler() {
   data[data_in_ptr] = TIM2->CCR3;
   data_in_ptr++;
-  if(data_in_ptr == 4096) data_in_ptr = 0;
+  if(data_in_ptr == data_out_ptr) overflow = 1;
+  if(data_in_ptr == MEMORY_SIZE) data_in_ptr = 0;
 }
