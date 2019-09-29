@@ -13,7 +13,6 @@ int main() {
   gpio_init();
   usb_init();
   floppy_init();
-  //while(!usb_config_active);
 
   while(1) {
     // Main loop. Run task requested by USB interrupt.
