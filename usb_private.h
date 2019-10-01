@@ -14,7 +14,7 @@ struct USBBufTable {
 };
 
 // Totally generic device descriptor
-uint8_t device_descriptor[] = {
+char device_descriptor[] = {
   18,
   1,
   0x10,0x01,
@@ -28,7 +28,7 @@ uint8_t device_descriptor[] = {
 };
 
 // Describes a standard virtual COM port
-uint8_t config_descriptor[] = {
+char config_descriptor[] = {
 /*Configuation Descriptor*/
   0x09,   /* bLength: Configuation Descriptor size */
   2,      /* bDescriptorType: Configuration */

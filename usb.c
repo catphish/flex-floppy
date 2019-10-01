@@ -77,7 +77,7 @@ uint32_t ep_rx_ready(uint32_t ep) {
   return((USB_EPR(ep) & 0x3000) == 0x2000);
 }
 
-void usb_read(uint8_t ep, uint8_t * buffer, uint32_t len) {
+void usb_read(uint8_t ep, char * buffer, uint32_t len) {
   ep &= 0x7f;
   while(!ep_rx_ready(ep));
   uint32_t rxBufferAddr = USBBUFTABLE->ep_desc[ep].rxBufferAddr;
@@ -88,7 +88,7 @@ void usb_read(uint8_t ep, uint8_t * buffer, uint32_t len) {
   USB_EPR(ep) = (USB_EPR(ep) & 0x078f) | 0x1000;
 }
 
-void usb_write_packet(uint8_t ep, uint8_t * buffer, uint32_t len) {
+void usb_write_packet(uint8_t ep, char * buffer, uint32_t len) {
   ep &= 0x7f;
   uint32_t txBufferAddr = USBBUFTABLE->ep_desc[ep].txBufferAddr;
   for(int n=0; n<len; n+=2) {
@@ -100,7 +100,7 @@ void usb_write_packet(uint8_t ep, uint8_t * buffer, uint32_t len) {
   USB_EPR(ep) = (USB_EPR(ep) & 0x878f) | 0x0010;
 }
 
-void usb_write(uint8_t ep, uint8_t * buffer, uint32_t len, uint32_t limit_len) {
+void usb_write(uint8_t ep, char * buffer, uint32_t len, uint32_t limit_len) {
   if(limit_len < len) len = limit_len;
   while(len > 64) {
     while(!ep_ready(ep));
@@ -112,7 +112,7 @@ void usb_write(uint8_t ep, uint8_t * buffer, uint32_t len, uint32_t limit_len) {
   usb_write_packet(ep, buffer, len);
 }
 
-void handle_setup(uint8_t * packet) {
+void handle_setup(char * packet) {
   uint8_t bmRequestType = packet[0];
   uint8_t bRequest      = packet[1];
   // Descriptor request
@@ -159,7 +159,7 @@ void USB_IRQHandler() {
     if(USB->ISTR & 0x10) {
       // RX
       uint32_t len = USBBUFTABLE->ep_desc[ep].rxBufferCount & 0x03ff;
-      uint8_t rx_buf[64];
+      char rx_buf[64];
       usb_read(ep, rx_buf, len);
       if(USB_EPR(ep) & USB_EP_SETUP) {
         handle_setup(rx_buf);

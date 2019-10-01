@@ -63,15 +63,11 @@ void track_zero() {
 
 void floppy_enable() {
   GPIOB->BSRR = (1<<(16+15)); // Enable
-}
-void floppy_disable() {
-  GPIOB->BSRR = (1<<(15)); // Disable
-}
-void motor_on() {
   GPIOB->BSRR = (1<<(16+14)); // Motor on
 }
-void motor_off() {
+void floppy_disable() {
   GPIOB->BSRR = (1<<(14)); // Motor off
+  GPIOB->BSRR = (1<<(15)); // Disable
 }
 
 void start_timer() {
@@ -82,58 +78,20 @@ void start_timer() {
   TIM2->CR1   = 1;
 }
 
-void floppy_handle_usb_request(uint8_t * packet, uint8_t length) {
+void floppy_handle_usb_request(char * packet, uint8_t length) {
   if(packet[0] == 1) {
-    // Enable
     floppy_enable();
-    motor_on();
   }
   if(packet[0] == 2) {
-    // Disable
-    motor_off();
     floppy_disable();
   }
   if(packet[0] == 4) {
     target_track = packet[1];
     task = 4;
-
   }
-}
-
-// Load one raw MFM bit into a raw sector
-void record_bit(struct raw_sector * sector, char bit, uint32_t * syncword, int32_t * progress) {
-  if(*progress == -1) {
-    // Waiting for 32-bit sync
-    *syncword = (*syncword << 1) | bit;
-    if(*syncword == 0x44894489) {
-      *progress = 0;
-    }
-  } else {
-    // Dump raw MFM bits into data structure
-    sector->data[*progress / 8] <<= 1;
-    sector->data[*progress / 8] |= bit;
-    (*progress)++;
-  }
-}
-
-// Parse one raw sector into a decoded sector
-void decode_sector(struct raw_sector * raw_sector, struct decoded_sector * decoded_sector, struct decoded_sector ** ordered_sectors) {
-  decoded_sector->format    = ((raw_sector->data[0] & 0x55) << 1) | (raw_sector->data[4] & 0x55);
-  decoded_sector->track     = ((raw_sector->data[1] & 0x55) << 1) | (raw_sector->data[5] & 0x55);
-  decoded_sector->sector    = ((raw_sector->data[2] & 0x55) << 1) | (raw_sector->data[6] & 0x55);
-  decoded_sector->remaining = ((raw_sector->data[3] & 0x55) << 1) | (raw_sector->data[7] & 0x55);
-  for(int n = 0; n < 512; n++) {
-    decoded_sector->data[n] = ((raw_sector->data[56+n] & 0x55) << 1) | (raw_sector->data[568+n] & 0x55);
-  }
-  ordered_sectors[decoded_sector->sector] = decoded_sector;
 }
 
 void floppy_read_track() {
-  int32_t progress;
-  int sector;
-  uint32_t syncword;
-  int prev_ccr3;
-
   // Zero the head if the current position is unknown
   if(headpos == -1) track_zero();
 
@@ -144,21 +102,20 @@ void floppy_read_track() {
   set_side(target_track % 2);
 
   start_timer();
-  progress = -1; // Waiting for sync
-  syncword = 0;
-  sector = 0;
-  prev_ccr3 = 0;
+  uint32_t sector_bitmap = 0; // Bitmap of successfully read sectors
+  int32_t progress = -1; // Waiting for sync
+  uint32_t prev_ccr3 = 0; // Store previous timer value to calculate delta
   TIM2->SR = 0;
 
-  struct raw_sector raw_sectors[11];
-  struct decoded_sector decoded_sectors[11];
-  struct decoded_sector * ordered_sectors[11];
+  struct sector sectors[11];
+  struct sector * current_sector = sectors;
+  struct sector * ordered_sectors[11];
 
   while(1) {
     if(TIM2->CNT > 80000000) {
       // 1-second timeout
       while(!ep_ready(0x82));
-      usb_write_packet(0x82, (unsigned char *)"\1", 1);
+      usb_write_packet(0x82, "\1", 1);
       return;
     }
     if(TIM2->SR & (1<<3)) {
@@ -168,33 +125,82 @@ void floppy_read_track() {
       prev_ccr3 = tval;
 
       while(bits) {
-        record_bit(raw_sectors + sector, bits == 1, &syncword, &progress);
+        if(progress == -1) {
+          // Don't worry about bytes 0-3 during reading
+          uint32_t * syncword = (uint32_t *)(current_sector->raw + 4);
+          // Waiting for 32-bit sync
+          *syncword <<= 1;
+          *syncword |= (bits == 1);
+          if(*syncword == 0x44894489) {
+            progress = 64; // 0x8 * 8-bits
+          }
+          current_sector->header_checksum = 0;
+          current_sector->data_checksum = 0;
+        } else {
+          // Dump raw MFM bits into data structure
+          current_sector->raw[progress / 8] <<= 1;
+          current_sector->raw[progress / 8] |= (bits == 1);
+          progress++;
+
+          // Generate checksums as we go along
+          if(progress % 32 == 0) {
+            uint32_t previous_long = *(uint32_t*)(current_sector->raw + (progress / 8 - 4));
+            if(progress > 8*8 && progress <= 48*8) {
+              current_sector->header_checksum ^= previous_long;
+            }
+            if(progress > 64*8) {
+              current_sector->data_checksum ^= previous_long;
+            }
+          }
+
+          if(progress == 8704) break;
+        }
         bits--;
       }
     }
-    if(progress >= 8640) {
-      progress = -1;
-      sector++;
-      if(sector == 11) {
-        // Done
-        break;
+    if(progress == 8704) {
+      // End of sector
+
+      // Compare the even checksum bits, the odd bits are just MFM clock
+      uint32_t header_checksum = *(uint32_t*)(current_sector->raw + 52);
+      uint32_t data_checksum   = *(uint32_t*)(current_sector->raw + 60);
+      header_checksum &= 0x55555555;
+      data_checksum   &= 0x55555555;
+      current_sector->header_checksum &= 0x55555555;
+      current_sector->data_checksum   &= 0x55555555;
+
+      if(header_checksum == current_sector->header_checksum) {
+        if(data_checksum == current_sector->data_checksum) {
+          // Got a good sector
+          uint8_t sector_number = ((current_sector->raw[10] & 0x55) << 1) | (current_sector->raw[14] & 0x55);
+
+          if(sector_number < 11 && (sector_bitmap & (1 << sector_number)) == 0) {
+            // We need this piece, record it.
+            ordered_sectors[sector_number] = current_sector;
+            current_sector++;
+            sector_bitmap |= (1 << sector_number);
+          }
+          if(sector_bitmap == 0b11111111111) {
+            // We have all the pieces. Yay.
+            for(int n=0; n<11; n++) {
+              for(int m=0; m<512; m+=64) {
+                char sector_out[64];
+                for(int j=0; j<64; j++) {
+                  sector_out[j] = ((ordered_sectors[n]->raw[64+m+j] & 0x55) << 1) | (ordered_sectors[n]->raw[576+m+j] & 0x55);
+                }
+                while(!ep_ready(0x82));
+                usb_write_packet(0x82, sector_out, 64);
+              }
+            }
+            while(!ep_ready(0x82));
+            usb_write_packet(0x82, "\0", 1);
+            return;
+          }
+
+        }
       }
+      progress = -1;
     }
   }
 
-  // Success reading 11 raw sectors. Now decode.
-  for(sector=0; sector < 11; sector++) {
-    decode_sector(raw_sectors + sector, decoded_sectors + sector, ordered_sectors);
-  }
-
-  // Success decoding 11 sectors. Now send to USB.
-  for(sector=0; sector < 11; sector++) {
-    for(int bytes = 0; bytes < 512; bytes += 64) {
-      while(!ep_ready(0x82));
-      usb_write_packet(0x82, (unsigned char *)(ordered_sectors[sector]->data + bytes), 64);
-    }
-  }
-
-  while(!ep_ready(0x82));
-  usb_write_packet(0x82, (unsigned char *)"\0", 1);
 }

@@ -16,8 +16,8 @@ device.open_interface(0) do |handle|
     loop do
       # Receive 64 bytes
       data = handle.bulk_transfer(:endpoint => 0x82, :dataIn => 64, :timeout => 10000)
-      break if data == "\0"
       raise ReadError if data == "\1"
+      break if data == "\0"
       STDOUT.write(data)
     end
   end
