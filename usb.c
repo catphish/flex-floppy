@@ -137,6 +137,32 @@ void handle_setup(char * packet) {
     usb_write(0,0,0,0);
     usb_config_active = 1;
   }
+  // MSC GET MAX LUN
+  if(bmRequestType == 0xA1 && bRequest == 0xFE)
+    usb_write(0, "\0", 1, 1);
+}
+
+void msc_handle_usb_request(char * packet, uint8_t length) {
+  uint8_t opcode = packet[15];
+  if(opcode == 0x12) {
+    // INQUIRY
+    usb_write(0x82, scsi_descriptor, 36, 36);
+    char scsi_response[13];
+    scsi_response[0] = 'U';
+    scsi_response[1] = 'S';
+    scsi_response[2] = 'B';
+    scsi_response[3] = 'S';
+    scsi_response[4] = packet[4];
+    scsi_response[5] = packet[5];
+    scsi_response[6] = packet[6];
+    scsi_response[7] = packet[7];
+    scsi_response[8] = 0;
+    scsi_response[9] = 0;
+    scsi_response[10] = 0;
+    scsi_response[11] = 0;
+    scsi_response[12] = 0;
+    usb_write(0x82, scsi_response, 13, 13);
+  }
 }
 
 void USB_IRQHandler() {
@@ -144,8 +170,13 @@ void USB_IRQHandler() {
     USB->ISTR &= ~USB_ISTR_RESET;
     buffer_pointer = 64;
 
+    // Control
     usb_configure_ep(0, 1, 64);
+    // Proprietary interface
     usb_configure_ep(0x01, 0, 64);
+    usb_configure_ep(0x81, 0, 64);
+    // Mass storage
+    usb_configure_ep(0x02, 0, 64);
     usb_configure_ep(0x82, 0, 64);
 
     USB->BTABLE = 0;
@@ -163,9 +194,10 @@ void USB_IRQHandler() {
       usb_read(ep, rx_buf, len);
       if(USB_EPR(ep) & USB_EP_SETUP) {
         handle_setup(rx_buf);
-      }
-      if(ep == 1) {
+      } else if(ep == 1) {
         floppy_handle_usb_request(rx_buf, len);
+      } else if(ep == 2) {
+        msc_handle_usb_request(rx_buf, len);
       }
     } else {
       // TX

@@ -114,8 +114,8 @@ void floppy_read_track() {
   while(1) {
     if(TIM2->CNT > 80000000) {
       // 1-second timeout
-      while(!ep_ready(0x82));
-      usb_write_packet(0x82, "\1", 1);
+      while(!ep_ready(0x81));
+      usb_write_packet(0x81, "\1", 1);
       return;
     }
     if(TIM2->SR & (1<<3)) {
@@ -188,12 +188,12 @@ void floppy_read_track() {
                 for(int j=0; j<64; j++) {
                   sector_out[j] = ((ordered_sectors[n]->raw[64+m+j] & 0x55) << 1) | (ordered_sectors[n]->raw[576+m+j] & 0x55);
                 }
-                while(!ep_ready(0x82));
-                usb_write_packet(0x82, sector_out, 64);
+                while(!ep_ready(0x81));
+                usb_write_packet(0x81, sector_out, 64);
               }
             }
-            while(!ep_ready(0x82));
-            usb_write_packet(0x82, "\0", 1);
+            while(!ep_ready(0x81));
+            usb_write_packet(0x81, "\0", 1);
             return;
           }
 
