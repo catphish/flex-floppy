@@ -99,7 +99,7 @@ char config_descriptor[] = {
 };
 
 char scsi_descriptor[] = {
-  0x0E, 0x80, 0x02, 0x02, 0x20,
+  0x0E, 0x80, 0x00, 0x02, 0x20,
   0,0,0,
   'c', 'a', 't', 'p', 'h', 'i', 's', 'h',
   'a', 'm', 'i', 'g', 'a', ' ', 'f', 'l',

@@ -142,26 +142,52 @@ void handle_setup(char * packet) {
     usb_write(0, "\0", 1, 1);
 }
 
+void send_scsi_status(uint8_t endpoint, char * request_packet, uint8_t status) {
+  char response[13];
+  response[0] = 'U';
+  response[1] = 'S';
+  response[2] = 'B';
+  response[3] = 'S';
+  response[4] = request_packet[4];
+  response[5] = request_packet[5];
+  response[6] = request_packet[6];
+  response[7] = request_packet[7];
+  response[8] = 0;
+  response[9] = 0;
+  response[10] = 0;
+  response[11] = 0;
+  response[12] = status;
+  usb_write(endpoint, response, 13, 13);
+}
+
 void msc_handle_usb_request(char * packet, uint8_t length) {
   uint8_t opcode = packet[15];
+  uint8_t evpd = packet[16] & 1;
   if(opcode == 0x12) {
-    // INQUIRY
-    usb_write(0x82, scsi_descriptor, 36, 36);
-    char scsi_response[13];
-    scsi_response[0] = 'U';
-    scsi_response[1] = 'S';
-    scsi_response[2] = 'B';
-    scsi_response[3] = 'S';
-    scsi_response[4] = packet[4];
-    scsi_response[5] = packet[5];
-    scsi_response[6] = packet[6];
-    scsi_response[7] = packet[7];
-    scsi_response[8] = 0;
-    scsi_response[9] = 0;
-    scsi_response[10] = 0;
-    scsi_response[11] = 0;
-    scsi_response[12] = 0;
-    usb_write(0x82, scsi_response, 13, 13);
+    uint16_t allocation_length = (packet[18] << 8) | packet[19];
+    if(evpd) {
+      send_scsi_status(0x82, packet, 1);
+    } else {
+      // INQUIRY
+      usb_write(0x82, scsi_descriptor, 36, allocation_length);
+      send_scsi_status(0x82, packet, 0);
+    }
+  } else if(opcode == 0x0) {
+    // TEST UNIT READY
+    send_scsi_status(0x82, packet, 0);
+  } else if(opcode == 0x5a) {
+    // MODE SENSE
+    char response[] = {0,6, 0,0,0,0,0,0};
+    usb_write(0x82, response, 8, 8);
+    send_scsi_status(0x82, packet, 0);
+  } else if(opcode == 0x25) {
+    // READ CAPACITY
+    char response[] = {0,0,6,224, 0,0,2,0}; // 11*160, 512
+    usb_write(0x82, response, 8, 8);
+    send_scsi_status(0x82, packet, 0);
+  } else {
+    // Unknown command
+    send_scsi_status(0x82, packet, 1);
   }
 }
 
