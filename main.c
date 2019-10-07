@@ -2,23 +2,17 @@
 #include <stdint.h>
 #include "gpio.h"
 #include "usb.h"
-#include "floppy.h"
 
 extern volatile uint32_t usb_config_active;
 
-volatile uint8_t task;
-
 int main() {
-  task = 0;
   gpio_init();
   usb_init();
-  floppy_init();
+  char data[64];
+
+  while(!usb_config_active);
 
   while(1) {
-    // Main loop. Run task requested by USB interrupt.
-    if(task == 4) {
-      floppy_read_track();
-      task = 0;
-    }
+    usb_write_dbl(0x82, data, 64);
   }
 }
