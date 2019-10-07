@@ -1,5 +1,6 @@
+#define USB_EPR(n) (*(volatile uint16_t *)(USB_BASE + 4 * n))
 #define USBBUFTABLE ((volatile struct USBBufTable *)0x40006C00)
-#define USBBUFRAW ((volatile char *)0x40006C00)
+#define USBBUFRAW ((volatile uint8_t *)0x40006C00)
 
 struct USBBufTable {
   struct USBBufDesc {
@@ -32,12 +33,11 @@ char config_descriptor[] = {
   2,      /* bDescriptorType: Configuration */
   9+9+7+7,     /* wTotalLength:no of returned bytes */
   0x00,
-  0x01,   /* bNumInterfaces */
+  0x01,   /* bNumInterfaces: 2 interface */
   0x01,   /* bConfigurationValue: Configuration value */
   0x00,   /* iConfiguration: Index of string descriptor describing the configuration */
   0x80,   /* bmAttributes: bus powered */
   50,     /* MaxPower 100 mA */
-
 /*Interface Descriptor*/
   0x09,   /* bLength: Interface Descriptor size */
   4,      /* bDescriptorType: Interface */
@@ -61,7 +61,7 @@ char config_descriptor[] = {
 /*TX Endpoint Descriptor*/
   0x07,   /* bLength: Endpoint Descriptor size */
   5,   /* bDescriptorType: Endpoint */
-  0x82,   /* bEndpointAddress: (IN1) */
+  0x81,   /* bEndpointAddress: (IN2) */
   0x02,   /* bmAttributes: Bulk */
   64,     /* wMaxPacketSize: */
   0x00,

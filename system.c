@@ -1,5 +1,6 @@
 #include <stm32l433xx.h>
 #include "usb.h"
+#include "floppy.h"
 
 #define nop()  __asm__ __volatile__ ("nop" ::)
 
