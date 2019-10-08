@@ -32,10 +32,10 @@ void floppy_init() {
   gpio_port_mode(GPIOB, 15, 1, 0, 0, 1); // B15 ENABLE    OUT
 }
 
-#define MEMORY_SIZE 8192
-uint16_t data[MEMORY_SIZE];
-uint16_t data_in_ptr  = 0;
-uint16_t data_out_ptr = 0;
+#define MEMORY_SIZE 4096
+volatile uint16_t data[MEMORY_SIZE];
+volatile uint16_t data_in_ptr  = 0;
+volatile uint16_t data_out_ptr = 0;
 
 void track_minus() {
   GPIOB->BSRR = (1<<13);
@@ -75,19 +75,30 @@ void floppy_disable() {
 }
 
 int overflow;
+uint8_t target_track;
 
 void floppy_read_track() {
+  uint8_t target_headpos = target_track / 2;
+  while(headpos < target_headpos) track_plus();
+  while(headpos > target_headpos) track_minus();
+  set_side(target_track % 2);
+
+  msleep(10);
+
+  TIM2->CR1   = 0;
+  TIM2->DIER  = 0;
+
+  TIM2->CCMR2 = 1;
+  TIM2->CCER  = (1<<8) | (1<<9);
+  TIM2->CNT   = 0;
+
   data_in_ptr  = 0;
   data_out_ptr = 0;
   overflow = 0;
 
-  TIM2->CR1   = 0;
-  TIM2->CCMR2 = 1;
-  TIM2->CCER  = (1<<8) | (1<<9);
-  TIM2->CNT   = 0;
-  TIM2->DIER  = (1<<3);
-  TIM2->EGR   = (1<<3);
+  TIM2->SR    = 0;
   TIM2->CR1   = 1;
+  TIM2->DIER  = (1<<3);
 
   while(TIM2->CNT < 48000000) {
     if(overflow) {
@@ -101,6 +112,7 @@ void floppy_read_track() {
       if(data_out_ptr == MEMORY_SIZE) data_out_ptr = 0;
     }
   }
+  TIM2->DIER  = 0;
   TIM2->CR1   = 0;
 
   // EOF
@@ -120,12 +132,7 @@ void floppy_handle_usb_request(char * packet, uint8_t length) {
   }
   if(packet[0] == 4) {
     // Seek
-    uint8_t target_track = packet[1];
-    uint8_t target_headpos = target_track / 2;
-    while(headpos < target_headpos) track_plus();
-    while(headpos > target_headpos) track_minus();
-    set_side(target_track % 2);
-
+    target_track = packet[1];
     task = 4;
   }
 }

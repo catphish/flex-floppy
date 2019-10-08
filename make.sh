@@ -2,7 +2,7 @@ set -e
 rm -f *.o
 PATH=/home/charlie/gcc-arm-none-eabi-8-2018-q4-major/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/home/charlie/.rvm/bin:/home/charlie/.rvm/bin
 REPOROOT="/home/charlie/Applications/STM32Cube_FW_L4_V1.14.0"
-CCOPTS="-Wall -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16 -I$REPOROOT/Drivers/CMSIS/Device/ST/STM32L4xx/Include -I$REPOROOT/Drivers/CMSIS/Include -DSTM32L4xx -O2 -ffast-math"
+CCOPTS="-Wall -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16 -I$REPOROOT/Drivers/CMSIS/Device/ST/STM32L4xx/Include -I$REPOROOT/Drivers/CMSIS/Include -DSTM32L4xx -O0 -ffast-math"
 arm-none-eabi-gcc $CCOPTS -c startup_stm32l433xx.s -o startup_stm32l433xx.o
 arm-none-eabi-gcc $CCOPTS -c system.c -o system.o
 arm-none-eabi-gcc $CCOPTS -c main.c -o main.o
