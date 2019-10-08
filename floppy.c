@@ -75,6 +75,7 @@ void floppy_disable() {
 }
 
 int overflow;
+uint32_t previous_timer_value;
 uint8_t target_track;
 
 void floppy_read_track() {
@@ -92,9 +93,10 @@ void floppy_read_track() {
   TIM2->CCER  = (1<<8) | (1<<9);
   TIM2->CNT   = 0;
 
-  data_in_ptr  = 0;
-  data_out_ptr = 0;
-  overflow = 0;
+  previous_timer_value = 0;
+  data_in_ptr   = 0;
+  data_out_ptr  = 0;
+  overflow      = 0;
 
   TIM2->SR    = 0;
   TIM2->CR1   = 1;
@@ -105,7 +107,7 @@ void floppy_read_track() {
       usb_write(0x81, "\1", 1);
       return;
     }
-    // Wait for a timer value
+    // Wait until there are 32x2 bytes ready to transmit
     if((data_in_ptr >= (data_out_ptr + 32)) || (data_in_ptr < data_out_ptr)) {
       usb_write(0x81, (char *)(data + data_out_ptr), 64);
       data_out_ptr = data_out_ptr + 32;
@@ -138,8 +140,13 @@ void floppy_handle_usb_request(char * packet, uint8_t length) {
 }
 
 void TIM2_IRQHandler() {
-  data[data_in_ptr] = TIM2->CCR3;
-  data_in_ptr++;
-  if(data_in_ptr == data_out_ptr) overflow = 1;
-  if(data_in_ptr == MEMORY_SIZE) data_in_ptr = 0;
+  uint32_t timer_value = TIM2->CCR3;
+  if(previous_timer_value) {
+    uint32_t delta = timer_value - previous_timer_value;
+    data[data_in_ptr] = delta;
+    data_in_ptr++;
+    if(data_in_ptr == data_out_ptr) overflow = 1;
+    if(data_in_ptr == MEMORY_SIZE) data_in_ptr = 0;
+  }
+  previous_timer_value = timer_value;
 }
