@@ -77,10 +77,11 @@ uint32_t ep_rx_ready(uint32_t ep) {
   return((USB_EPR(ep) & 0x3000) == 0x2000);
 }
 
-void usb_read(uint8_t ep, char * buffer, uint32_t len) {
+void usb_read(uint8_t ep, char * buffer) {
   ep &= 0x7f;
   while(!ep_rx_ready(ep));
   uint32_t rxBufferAddr = USBBUFTABLE->ep_desc[ep].rxBufferAddr;
+  uint32_t len = USBBUFTABLE->ep_desc[ep].rxBufferCount & 0x03ff;
   for(int n=0; n<len; n+=2) {
     *(uint16_t *)(buffer + n) = *(uint16_t *)(USBBUFRAW+rxBufferAddr+n);
   }
@@ -88,12 +89,12 @@ void usb_read(uint8_t ep, char * buffer, uint32_t len) {
   USB_EPR(ep) = (USB_EPR(ep) & 0x378f) ^ 0x3000;
 }
 
-void usb_write(uint8_t ep, char * buffer, uint32_t len) {
+void usb_write(uint8_t ep, volatile char * buffer, uint32_t len) {
   ep &= 0x7f;
   while(!ep_tx_ready(ep));
   uint32_t txBufferAddr = USBBUFTABLE->ep_desc[ep].txBufferAddr;
   for(int n=0; n<len; n+=2) {
-    *(uint16_t *)(USBBUFRAW+txBufferAddr+n) = *(uint16_t *)(buffer + n);
+    *(volatile uint16_t *)(USBBUFRAW+txBufferAddr+n) = *(uint16_t *)(buffer + n);
   }
   USBBUFTABLE->ep_desc[ep].txBufferCount = len;
 
@@ -151,14 +152,15 @@ void USB_IRQHandler() {
     uint32_t ep = USB->ISTR & 0xf;
     if(USB->ISTR & 0x10) {
       // RX
-      uint32_t len = USBBUFTABLE->ep_desc[ep].rxBufferCount & 0x03ff;
-      char rx_buf[64];
-      usb_read(ep, rx_buf, len);
-      if(USB_EPR(ep) & USB_EP_SETUP) {
+      if(ep == 0) {
+        char rx_buf[64];
+        usb_read(ep, rx_buf);
         handle_setup(rx_buf);
-      }
-      if(ep == 1) {
-        floppy_handle_usb_request(rx_buf, len);
+      } else if(ep == 1) {
+        floppy_handle_usb_request(ep);
+      } else {
+        // Discard
+        USB_EPR(ep) = (USB_EPR(ep) & 0x378f) ^ 0x3000;
       }
     } else {
       // TX

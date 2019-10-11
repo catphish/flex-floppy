@@ -6,12 +6,22 @@
 #include "util.h"
 
 volatile extern uint8_t task;
-uint8_t headpos = 0;
+volatile uint32_t previous_timer_value;
+volatile uint8_t headpos = 0;
+volatile uint8_t target_track;
+volatile uint8_t overflow;
+volatile uint8_t read_length;
+
+#define MEMORY_SIZE 8192
+volatile char data[MEMORY_SIZE];
+volatile uint16_t data_in_ptr  = 0;
+volatile uint16_t data_out_ptr = 0;
 
 void floppy_init() {
   // TIM2
   RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN;
   NVIC->ISER[0] |= (1 << TIM2_IRQn);
+  NVIC->IP[TIM2_IRQn] = 1;
 
   gpio_port_mode(GPIOA, 1, 0, 0, 1, 0);  // A1  READY     IN
   gpio_port_mode(GPIOA, 2, 1, 0, 0, 1);  // A2  HEADSELET OUT
@@ -31,11 +41,6 @@ void floppy_init() {
   gpio_port_mode(GPIOB, 14, 1, 0, 0, 1); // B14 MOTOR     OUT
   gpio_port_mode(GPIOB, 15, 1, 0, 0, 1); // B15 ENABLE    OUT
 }
-
-#define MEMORY_SIZE 4096
-volatile uint16_t data[MEMORY_SIZE];
-volatile uint16_t data_in_ptr  = 0;
-volatile uint16_t data_out_ptr = 0;
 
 void track_minus() {
   GPIOB->BSRR = (1<<13);
@@ -74,9 +79,36 @@ void floppy_disable() {
   GPIOB->BSRR = (1<<(15)); // Disable
 }
 
-int overflow;
-uint32_t previous_timer_value;
-uint8_t target_track;
+void floppy_handle_usb_request(uint8_t ep) {
+  if(task == 0) {
+    char packet[64];
+    usb_read(ep, packet);
+    if(packet[0] == 1) {
+      // Enable
+      floppy_enable();
+      track_zero();
+    }
+    if(packet[0] == 2) {
+      // Disable
+      floppy_disable();
+    }
+    if(packet[0] == 4) {
+      read_length = packet[2];
+      // Seek
+      target_track = packet[1];
+      // Initiate Read
+      task = 4;
+    }
+    if(packet[0] == 6) {
+      // Seek
+      target_track = packet[1];
+      // Initiate Write
+      task = 6;
+    }
+  } else if(task == 6) {
+    // This data will be read in a busy-loop
+  }
+}
 
 void floppy_read_track() {
   uint8_t target_headpos = target_track / 2;
@@ -102,51 +134,60 @@ void floppy_read_track() {
   TIM2->CR1   = 1;
   TIM2->DIER  = (1<<3);
 
-  while(TIM2->CNT < 48000000) {
+  while(TIM2->CNT < (read_length * 1000000)) {
     if(overflow) {
-      usb_write(0x81, "\1", 1);
+      usb_write(0x81, "\0\1", 2);
       return;
     }
-    // Wait until there are 32x2 bytes ready to transmit
-    if((data_in_ptr >= (data_out_ptr + 32)) || (data_in_ptr < data_out_ptr)) {
-      usb_write(0x81, (char *)(data + data_out_ptr), 64);
-      data_out_ptr = data_out_ptr + 32;
-      if(data_out_ptr == MEMORY_SIZE) data_out_ptr = 0;
+    // Wait until there are 64 bytes in the ring buffer ready to transmit
+    if((data_in_ptr >= (data_out_ptr + 64)) || (data_in_ptr < data_out_ptr)) {
+      usb_write(0x81, data + data_out_ptr, 64);
+      data_out_ptr = (data_out_ptr + 64) % MEMORY_SIZE;
     }
   }
   TIM2->DIER  = 0;
   TIM2->CR1   = 0;
+  while((data_in_ptr >= (data_out_ptr + 64)) || (data_in_ptr < data_out_ptr)) {
+    usb_write(0x81, data + data_out_ptr, 64);
+    data_out_ptr = (data_out_ptr + 64) % MEMORY_SIZE;
+  }
 
   // EOF
-  usb_write(0x81, "\0", 1);
+  usb_write(0x81, "\0\0", 2);
 }
 
-void floppy_handle_usb_request(char * packet, uint8_t length) {
-  if(packet[0] == 1) {
-    // Enable
-    floppy_enable();
-    track_zero();
-    set_side(0);
-  }
-  if(packet[0] == 2) {
-    // Disable
-    floppy_disable();
-  }
-  if(packet[0] == 4) {
-    // Seek
-    target_track = packet[1];
-    task = 4;
-  }
+static inline void increment_data_in_ptr() {
+  data_in_ptr = (data_in_ptr + 1) % MEMORY_SIZE;
+  if(data_in_ptr == data_out_ptr) overflow = 1;
 }
 
 void TIM2_IRQHandler() {
   uint32_t timer_value = TIM2->CCR3;
   if(previous_timer_value) {
     uint32_t delta = timer_value - previous_timer_value;
-    data[data_in_ptr] = delta;
-    data_in_ptr++;
-    if(data_in_ptr == data_out_ptr) overflow = 1;
-    if(data_in_ptr == MEMORY_SIZE) data_in_ptr = 0;
+    if(delta > 3839) {
+      // Send as 32-bit value
+      data[data_in_ptr] = 0xf;
+      increment_data_in_ptr();
+      data[data_in_ptr] = delta & 0xff; delta >>= 8;
+      increment_data_in_ptr();
+      data[data_in_ptr] = delta & 0xff; delta >>= 8;
+      increment_data_in_ptr();
+      data[data_in_ptr] = delta & 0xff; delta >>= 8;
+      increment_data_in_ptr();
+      data[data_in_ptr] = delta;
+      increment_data_in_ptr();
+    } else if (delta > 255) {
+      // Send as 16 bit value
+      data[data_in_ptr] = delta & 0xff; delta >>= 8;
+      increment_data_in_ptr();
+      data[data_in_ptr] = delta & 0xff; delta >>= 8;
+      increment_data_in_ptr();
+    } else if(delta > 15) {
+      // Send as 8 bit value
+      data[data_in_ptr++] = delta;
+      increment_data_in_ptr();
+    }
   }
   previous_timer_value = timer_value;
 }
