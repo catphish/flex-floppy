@@ -14,11 +14,15 @@ device.open_interface(0) do |handle|
     # 4 - Stream data
     handle.bulk_transfer(:endpoint => 0x1, :dataOut => [4, track, 20].pack('CCC'), :timeout => 10000)
     loop do
-      # Receive 64 bytes
-      data = handle.bulk_transfer(:endpoint => 0x81, :dataIn => 64, :timeout => 10000)
-      break if data == "\0\0"
-      raise ReadError if data == "\0\1"
-      track_data << data
+      # Receive data
+      data = handle.bulk_transfer(:endpoint => 0x81, :dataIn => 1024*1024, :timeout => 10000)
+      raise ReadError if data[-2, 2] == "\0\1"
+      if data[-2, 2] == "\0\0"
+        track_data << data[0, data.bytesize-2]
+        break
+      else
+        track_data << data
+      end
     end
     STDOUT.write ['T', track, track_data.bytesize].pack('aCN')
     STDOUT.write track_data
