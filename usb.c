@@ -77,7 +77,7 @@ uint32_t ep_rx_ready(uint32_t ep) {
   return((USB_EPR(ep) & 0x3000) == 0x2000);
 }
 
-void usb_read(uint8_t ep, char * buffer) {
+void usb_read(uint8_t ep, volatile char * buffer) {
   ep &= 0x7f;
   while(!ep_rx_ready(ep));
   uint32_t rxBufferAddr = USBBUFTABLE->ep_desc[ep].rxBufferAddr;

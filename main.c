@@ -20,6 +20,9 @@ int main() {
     if(task == 4) {
       floppy_read_track();
       task = 0;
+    } else if(task == 6) {
+      floppy_write_track();
+      task = 0;
     }
   }
 }

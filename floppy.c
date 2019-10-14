@@ -10,6 +10,7 @@ volatile uint32_t previous_timer_value;
 volatile uint8_t headpos = 0;
 volatile uint8_t target_track;
 volatile uint8_t overflow;
+volatile uint8_t finished;
 volatile uint8_t read_length;
 
 #define MEMORY_SIZE 8192
@@ -121,9 +122,11 @@ void floppy_read_track() {
   TIM2->CR1   = 0;
   TIM2->DIER  = 0;
 
+  // Configure TIM2 CH3 as input capture
   TIM2->CCMR2 = 1;
   TIM2->CCER  = (1<<8) | (1<<9);
   TIM2->CNT   = 0;
+  TIM2->ARR   = 0xffffffff;
 
   previous_timer_value = 0;
   data_in_ptr   = 0;
@@ -156,38 +159,95 @@ void floppy_read_track() {
   usb_write(0x81, "\0\0", 2);
 }
 
+void floppy_write_track() {
+  uint8_t target_headpos = target_track / 2;
+  while(headpos < target_headpos) track_plus();
+  while(headpos > target_headpos) track_minus();
+  set_side(target_track % 2);
+
+  msleep(10);
+
+  // Configure TIM2
+  TIM2->CR1   = 0;
+  TIM2->DIER  = 0;
+
+  // Configure TIM2 CH4 as PWM output (mode 1)
+  TIM2->CCMR2 = (6<<12);
+  TIM2->CCER  = (1<<12) | (1<<13);
+  TIM2->CNT   = 0;
+  TIM2->CCR4  = 160; // 2us pulse
+  
+  // Stream data
+  int running = 0;
+  data_in_ptr   = 0;
+  data_out_ptr  = 0;
+  overflow      = 0;
+  finished      = 0;
+  
+  usb_read(0x01, data);
+  data_in_ptr = 64;
+  while(!finished && !overflow) {
+    if((data_out_ptr >= (data_in_ptr + 64)) || (data_out_ptr < data_in_ptr)) {
+      if(ep_rx_ready(0x01)) {
+        // Receive data stream from PC into ring buffer
+        usb_read(0x01, (char *)(data + data_in_ptr));
+        data_in_ptr = (data_in_ptr + 64) % MEMORY_SIZE;
+        if(data_out_ptr == data_in_ptr && running == 0) {
+          // Buffer full. Go!
+          running = 1;
+          // Enable timer
+          TIM2->CR1   = 1;
+          TIM2->DIER  = (1<<3);
+        }
+      }
+    }
+  }
+  // Confirm, overflow here actually refers to an underrun
+  usb_write(0x81, (char*)&overflow, 1);
+}
+
 static inline void increment_data_in_ptr() {
   data_in_ptr = (data_in_ptr + 1) % MEMORY_SIZE;
   if(data_in_ptr == data_out_ptr) overflow = 1;
 }
 
 void TIM2_IRQHandler() {
-  uint32_t timer_value = TIM2->CCR3;
-  if(previous_timer_value) {
-    uint32_t delta = timer_value - previous_timer_value;
-    if(delta > 3839) {
-      // Send as 32-bit value
-      data[data_in_ptr] = 0xf;
-      increment_data_in_ptr();
-      data[data_in_ptr] = delta & 0xff; delta >>= 8;
-      increment_data_in_ptr();
-      data[data_in_ptr] = delta & 0xff; delta >>= 8;
-      increment_data_in_ptr();
-      data[data_in_ptr] = delta & 0xff; delta >>= 8;
-      increment_data_in_ptr();
-      data[data_in_ptr] = delta;
-      increment_data_in_ptr();
-    } else if (delta > 255) {
-      // Send as 16 bit value
-      data[data_in_ptr] = delta & 0xff; delta >>= 8;
-      increment_data_in_ptr();
-      data[data_in_ptr] = delta & 0xff; delta >>= 8;
-      increment_data_in_ptr();
-    } else if(delta > 15) {
-      // Send as 8 bit value
-      data[data_in_ptr++] = delta;
-      increment_data_in_ptr();
+  if(task == 4) {
+    // Read from TIM2->CH3
+    uint32_t timer_value = TIM2->CCR3;
+    if(previous_timer_value) {
+      uint32_t delta = timer_value - previous_timer_value;
+      if(delta > 3839) {
+        // Send as 32-bit value
+        data[data_in_ptr] = 0xf;
+        increment_data_in_ptr();
+        data[data_in_ptr] = delta & 0xff; delta >>= 8;
+        increment_data_in_ptr();
+        data[data_in_ptr] = delta & 0xff; delta >>= 8;
+        increment_data_in_ptr();
+        data[data_in_ptr] = delta & 0xff; delta >>= 8;
+        increment_data_in_ptr();
+        data[data_in_ptr] = delta;
+        increment_data_in_ptr();
+      } else if (delta > 255) {
+        // Send as 16 bit value
+        data[data_in_ptr] = delta & 0xff; delta >>= 8;
+        increment_data_in_ptr();
+        data[data_in_ptr] = delta & 0xff; delta >>= 8;
+        increment_data_in_ptr();
+      } else if(delta > 15) {
+        // Send as 8 bit value
+        data[data_in_ptr++] = delta;
+        increment_data_in_ptr();
+      }
+    }
+    previous_timer_value = timer_value;
+  } else if(task == 6) {
+    uint32_t tval;
+    // Write to TIM2->CH4 (actually we set TIM2->ARR)
+    uint8_t b0 = ((uint8_t*)data)[data_out_ptr];
+    if(b0 > 0xf) {
+      tval = b0;
     }
   }
-  previous_timer_value = timer_value;
 }
