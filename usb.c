@@ -162,6 +162,7 @@ void USB_IRQHandler() {
         // Discard
         USB_EPR(ep) = (USB_EPR(ep) & 0x378f) ^ 0x3000;
       }
+      USB_EPR(ep) &= 0x078f;
     } else {
       // TX
       USB_EPR(ep) &= 0x870f;

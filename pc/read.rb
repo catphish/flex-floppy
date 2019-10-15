@@ -8,11 +8,11 @@ device.open_interface(0) do |handle|
   # 1 - Enable up the drive
   handle.bulk_transfer(:endpoint => 0x1, :dataOut => "\1")
   sleep 0.5
-  (0..159).each do |track|
+  (0..0).each do |track|
     track_data = "".force_encoding('BINARY')
     STDERR.puts "Reading Track #{track}"
     # 4 - Stream data
-    handle.bulk_transfer(:endpoint => 0x1, :dataOut => [4, track, 20].pack('CCC'), :timeout => 10000)
+    handle.bulk_transfer(:endpoint => 0x1, :dataOut => [4, track, 40].pack('CCC'), :timeout => 10000)
     loop do
       # Receive data
       data = handle.bulk_transfer(:endpoint => 0x81, :dataIn => 1024*1024, :timeout => 10000)
