@@ -1,4 +1,3 @@
-#define USB_EPR(n) (*(volatile uint16_t *)(USB_BASE + 4 * n))
 #define USBBUFTABLE ((volatile struct USBBufTable *)0x40006C00)
 #define USBBUFRAW ((volatile uint8_t *)0x40006C00)
 

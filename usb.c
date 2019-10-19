@@ -6,9 +6,12 @@
 #include "gpio.h"
 #include "floppy.h"
 
+extern volatile uint8_t task;
+extern volatile uint8_t target_track;
+extern volatile uint32_t read_length;
+
 uint32_t buffer_pointer = 64;
 uint8_t pending_addr = 0;
-uint32_t usb_config_active = 0;
 
 void usb_init() {
   gpio_port_mode(GPIOA, 11, 2, 10, 0, 0); // A11 AF10
@@ -29,16 +32,14 @@ void usb_init() {
   PWR->CR2 |= (1<<10);
   usleep(10);
 
-  // Enable USB
-  USB->CNTR &= ~USB_CNTR_PDWN;
+  // Enable USB and reset
+  USB->CNTR = USB_CNTR_FRES;
   usleep(10);
-  USB->CNTR &= ~USB_CNTR_FRES;
+  // Deassert reset
+  USB->CNTR = 0;
   usleep(10);
-  USB->ISTR = 0;
-  USB->CNTR |= USB_CNTR_RESETM;
+  // Activate DP pullup
   USB->BCDR |= USB_BCDR_DPPU;
-
-  NVIC->ISER[2] |= (1 << (USB_IRQn - 64));
 }
 
 // Types: 0=Bulk,1=Control,2=Iso,3=Interrupt
@@ -102,9 +103,35 @@ void usb_write(uint8_t ep, volatile char * buffer, uint32_t len) {
   USB_EPR(ep) = (USB_EPR(ep) & 0x87bf) ^ 0x0030;
 }
 
-void handle_setup(char * packet) {
+void usb_reset() {
+  USB->ISTR &= ~USB_ISTR_RESET;
+  buffer_pointer = 64;
+
+  usb_configure_ep(0, 1, 64);
+  usb_configure_ep(0x01, 0, 64);
+  usb_configure_ep(0x81, 0, 64);
+
+  USB->BTABLE = 0;
+
+  // Enable the peripheral
+  USB->DADDR = USB_DADDR_EF;
+}
+
+void usb_handle_tx_complete() {
+  // TX
+  if(pending_addr) {
+    USB->DADDR = USB_DADDR_EF | pending_addr;
+    pending_addr = 0;
+  }
+}
+
+void handle_ep0() {
+  char packet[64];
+  usb_read(0, packet);
+
   uint8_t bmRequestType = packet[0];
   uint8_t bRequest      = packet[1];
+
   // Descriptor request
   if(bmRequestType == 0x80 && bRequest == 0x06) {
     uint8_t descriptor_type = packet[3];
@@ -129,49 +156,35 @@ void handle_setup(char * packet) {
   // Set configuration
   if(bmRequestType == 0x00 && bRequest == 0x09) {
     usb_write(0,0,0);
-    usb_config_active = 1;
-  }
-}
-
-void USB_IRQHandler() {
-  if(USB->ISTR & USB_ISTR_RESET) {
-    USB->ISTR &= ~USB_ISTR_RESET;
-    buffer_pointer = 64;
-
-    usb_configure_ep(0, 1, 64);
-    usb_configure_ep(0x01, 0, 64);
-    usb_configure_ep(0x81, 0, 64);
-
-    USB->BTABLE = 0;
-
-    // Enable the peripheral
-    USB->DADDR = USB_DADDR_EF;
   }
 
-  if(USB->ISTR & USB_ISTR_CTR) {
-    uint32_t ep = USB->ISTR & 0xf;
-    if(USB->ISTR & 0x10) {
-      // RX
-      if(ep == 0) {
-        char rx_buf[64];
-        usb_read(ep, rx_buf);
-        handle_setup(rx_buf);
-      } else if(ep == 1) {
-        floppy_handle_usb_request(ep);
-      } else {
-        // Discard
-        USB_EPR(ep) = (USB_EPR(ep) & 0x378f) ^ 0x3000;
-      }
-      USB_EPR(ep) &= 0x078f;
-    } else {
-      // TX
-      USB_EPR(ep) &= 0x870f;
-
-      if(pending_addr) {
-        USB->DADDR = USB_DADDR_EF | pending_addr;
-        pending_addr = 0;
-      }
-    }
+  // Enable Drive
+  if(bmRequestType == 0x41 && bRequest == 0x01) {
+    floppy_enable();
+    usb_write(0,0,0);
   }
-
+  // Disble Drive
+  if(bmRequestType == 0x41 && bRequest == 0x02) {
+    floppy_disable();
+    usb_write(0,0,0);
+  }
+  // Zero Head
+  if(bmRequestType == 0x41 && bRequest == 0x03) {
+    // This is a slow blocking operation!
+    track_zero();
+    usb_write(0,0,0);
+  }
+  // Seek Head
+  if(bmRequestType == 0x41 && bRequest == 0x04) {
+    // This is a slow blocking operation!
+    track_seek(packet[2]);
+    usb_write(0,0,0);
+  }
+  // Read Track
+  if(bmRequestType == 0x41 && bRequest == 0x05) {
+    read_length  = (uint32_t)packet[2] * 1000000;
+    floppy_start_read();
+    task = 5;
+    usb_write(0,0,0);
+  }
 }
