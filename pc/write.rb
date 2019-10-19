@@ -17,6 +17,10 @@ def read_data(handle)
   handle.bulk_transfer(:endpoint => 0x81, :dataIn => 1024*1024, :timeout => 10000)
 end
 
+def write_data(handle, data)
+  handle.bulk_transfer(:endpoint => 0x01, :dataOut => data, :timeout => 10000)
+end
+
 usb = LIBUSB::Context.new
 device = usb.devices(idVendor: 0x1209, idProduct: 0x0001).first
 device.open_interface(0) do |handle|
@@ -27,17 +31,28 @@ device.open_interface(0) do |handle|
   # Zero head
   send_command(handle, COMMAND_ZERO_HEAD)
 
-  (0..159).each do |track|
+  while(header = STDIN.read(6))
+    _, track, length = header.unpack('CCN')
+    puts [track, length].inspect
+
+    data = STDIN.read(length)
+    #data = data[0, 2] * 200000
+    #data << [0x0, 0x0].pack('CC')
+    #puts data.bytes.inspect
+    #data = [0x01,0x80].pack('CC')*(length/2)
+    #data += [0x0, 0x0].pack('CC')
+
     # Seek track
     send_command(handle, COMMAND_SEEK_HEAD, track)
     sleep 0.01
 
-    # Read 40,000,000 cycles - 0.5s
-    send_command(handle, COMMAND_READ_RAW, 20)
+    # Begin write
+    send_command(handle, COMMAND_WRITE_RAW)
 
-    track_data = read_data(handle)
-    STDOUT.write ['T', track, track_data.bytesize].pack('aCN')
-    STDOUT.write track_data
+    # Send data
+    track_data = write_data(handle, data)
+    result = read_data(handle)
+    puts result.bytes.inspect
   end
 
   # Disable drive

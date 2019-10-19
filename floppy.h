@@ -12,6 +12,8 @@ void floppy_write_disable();
 
 void disable_timer();
 void floppy_start_read();
+void floppy_prepare_write();
+void floppy_start_write();
 
 void track_zero();
 void track_seek(uint8_t target);

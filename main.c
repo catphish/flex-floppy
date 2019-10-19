@@ -26,8 +26,8 @@ int main() {
 
     // USB reset occurred. Reinitialize everything.
     if(USB->ISTR & USB_ISTR_RESET) {
-      usb_reset();
       task = 0;
+      usb_reset();
     }
 
     // USB packet transfer complete
@@ -37,11 +37,9 @@ int main() {
         // RX
         if(ep == 0) {
           handle_ep0();
-        } else if(ep == 1) {
-          //handle_ep1();
         } else {
-          // Discard
-          USB_EPR(ep) = (USB_EPR(ep) & 0x378f) ^ 0x3000;
+          // Clear pending state
+          USB_EPR(ep) &= 0x078f;
         }
       } else {
         usb_handle_tx_complete();
@@ -89,5 +87,40 @@ int main() {
         }
       }
     }
+
+    if(task == 7) { // Buffering (pre-write)
+      if(ep_rx_ready(0x01)) {
+        // Receive data stream from PC into ring buffer
+        usb_read(0x01, (char *)(data + data_in_ptr));
+        data_in_ptr += 64;
+
+        if(data_in_ptr == MEMORY_SIZE) {
+          // Buffer full. Start Writing.
+          data_in_ptr = 0;
+          task = 8;
+          floppy_start_write();
+        }
+      }
+    }
+
+    if(task == 8) { // Writing data
+      if(ep_rx_ready(0x01)) {
+        if((data_out_ptr >= (data_in_ptr + 64)) || (data_out_ptr < data_in_ptr)) {
+          usb_read(0x01, (char *)(data + data_in_ptr));
+          data_in_ptr = (data_in_ptr + 64) % MEMORY_SIZE;
+        }
+      }
+    }
+    
+    if(task == 9) { // End write
+      if(ep_tx_ready(0x81)) {
+        if(overflow)
+          usb_write(0x81, "\0\1", 2);
+        else
+          usb_write(0x81, "\0\0", 2);
+        task = 0;
+      }
+    }
+
   }
 }

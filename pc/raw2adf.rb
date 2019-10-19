@@ -80,7 +80,7 @@ end
 while STDIN.read(1)
   track_number, track_bytes = STDIN.read(5).unpack('CN')
   STDERR.puts "Decoding track #{track_number}"
-  timings = STDIN.read(track_bytes).unpack('S<*')
+  timings = STDIN.read(track_bytes).unpack('n*')
 
   track = Track.new
 

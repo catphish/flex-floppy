@@ -160,31 +160,41 @@ void handle_ep0() {
 
   // Enable Drive
   if(bmRequestType == 0x41 && bRequest == 0x01) {
+    task = 0;
     floppy_enable();
     usb_write(0,0,0);
   }
   // Disble Drive
   if(bmRequestType == 0x41 && bRequest == 0x02) {
+    task = 0;
     floppy_disable();
     usb_write(0,0,0);
   }
   // Zero Head
-  if(bmRequestType == 0x41 && bRequest == 0x03) {
+  if(bmRequestType == 0x41 && bRequest == 0x11) {
     // This is a slow blocking operation!
+    task = 0;
     track_zero();
     usb_write(0,0,0);
   }
   // Seek Head
-  if(bmRequestType == 0x41 && bRequest == 0x04) {
+  if(bmRequestType == 0x41 && bRequest == 0x12) {
     // This is a slow blocking operation!
+    task = 0;
     track_seek(packet[2]);
     usb_write(0,0,0);
   }
   // Read Track
-  if(bmRequestType == 0x41 && bRequest == 0x05) {
+  if(bmRequestType == 0x41 && bRequest == 0x21) {
     read_length  = (uint32_t)packet[2] * 1000000;
-    floppy_start_read();
     task = 5;
+    floppy_start_read();
+    usb_write(0,0,0);
+  }
+  // Write Track
+  if(bmRequestType == 0x41 && bRequest == 0x31) {
+    task = 7;
+    floppy_prepare_write();
     usb_write(0,0,0);
   }
 }

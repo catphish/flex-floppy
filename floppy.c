@@ -9,7 +9,6 @@ volatile extern uint8_t task;
 volatile uint32_t previous_timer_value;
 volatile uint8_t headpos = 0;
 volatile uint8_t overflow;
-volatile uint8_t finished;
 
 volatile char data[MEMORY_SIZE];
 volatile uint16_t data_in_ptr  = 0;
@@ -95,6 +94,7 @@ void disable_timer() {
   TIM2->CR1   = 0;
   TIM2->DIER  = 0;
 }
+
 void floppy_start_read() {
   disable_timer();
 
@@ -116,6 +116,32 @@ void floppy_start_read() {
   TIM2->DIER  = (1<<3);
 }
 
+void floppy_prepare_write() {
+  disable_timer();
+
+  // Configure TIM2 CH4 as PWM output (mode 1)
+  TIM2->CCMR2 = (6<<12);
+  TIM2->CCER  = (1<<12) | (1<<13);
+  TIM2->CNT   = 0;
+  TIM2->CCR4  = 160; // 2us pulse
+
+  // Zero the counters
+  data_in_ptr   = 0;
+  data_out_ptr  = 0;
+  overflow      = 0;
+}
+
+void floppy_start_write() {
+  // Arm the death ray
+  floppy_write_enable();
+  // Enable timer
+  TIM2->ARR   = 0xffffffff;
+  TIM2->DIER  = 1;
+  TIM2->SR    = 0;
+  TIM2->CR1   = 1;
+  TIM2->EGR   = 1;
+}
+
 static inline void increment_data_in_ptr() {
   data_in_ptr = (data_in_ptr + 1) % MEMORY_SIZE;
   if(data_in_ptr == data_out_ptr) overflow = 1;
@@ -134,7 +160,45 @@ void terminate_data() {
 }
 
 void TIM2_IRQHandler() {
-  TIM2->SR    = 0;
+if(task == 8) {
+    // Write to TIM2->CH4 (actually we set TIM2->ARR)
+    uint8_t b0 = ((uint8_t*)data)[data_out_ptr];
+    if(b0 > 0x0f) {
+      TIM2->ARR = b0;
+      // This is nasty. The statement above happens
+      // ASAP in this interrupt. If the value is too
+      // small, we might be too late. Limit it to 100.
+      if(b0 < 100)
+        overflow = 1;
+      increment_data_out_ptr();
+    } else if(b0 == 0x0f) {
+      increment_data_out_ptr();
+      uint32_t tval;
+      tval  = ((uint8_t*)data)[data_out_ptr]; tval <<= 8;
+      increment_data_out_ptr();
+      tval |= ((uint8_t*)data)[data_out_ptr]; tval <<= 8;
+      increment_data_out_ptr();
+      tval |= ((uint8_t*)data)[data_out_ptr]; tval <<= 8;
+      increment_data_out_ptr();
+      tval |= ((uint8_t*)data)[data_out_ptr];
+      increment_data_out_ptr();
+      TIM2->ARR = tval;
+    } else if(b0 > 0) {
+      increment_data_out_ptr();
+      uint32_t tval;
+      tval  = b0; tval <<= 8;
+      tval |= ((uint8_t*)data)[data_out_ptr];
+      TIM2->ARR = tval;
+      increment_data_out_ptr();
+    }
+    if(b0 == 0 || overflow ) {
+      TIM2->CR1  = 0;
+      TIM2->DIER = 0;
+      floppy_write_disable();
+      task = 9;
+    }
+  }
+
   if(task == 5) {
     // Read from TIM2->CH3
     uint32_t timer_value = TIM2->CCR3;
@@ -144,19 +208,19 @@ void TIM2_IRQHandler() {
         // Send as 32-bit value
         data[data_in_ptr] = 0xf;
         increment_data_in_ptr();
-        data[data_in_ptr] = delta & 0xff; delta >>= 8;
+        data[data_in_ptr] = (delta & 0xff000000) >> 24;
         increment_data_in_ptr();
-        data[data_in_ptr] = delta & 0xff; delta >>= 8;
+        data[data_in_ptr] = (delta & 0x00ff0000) >> 16;
         increment_data_in_ptr();
-        data[data_in_ptr] = delta & 0xff; delta >>= 8;
+        data[data_in_ptr] = (delta & 0x0000ff00) >> 8;
         increment_data_in_ptr();
-        data[data_in_ptr] = delta;
+        data[data_in_ptr] = (delta & 0x000000ff) >> 0;
         increment_data_in_ptr();
       } else if (delta > 255) {
         // Send as 16 bit value
-        data[data_in_ptr] = delta & 0xff; delta >>= 8;
+        data[data_in_ptr] = (delta & 0x0000ff00) >> 8;
         increment_data_in_ptr();
-        data[data_in_ptr] = delta & 0xff;
+        data[data_in_ptr] = (delta & 0x000000ff) >> 0;
         increment_data_in_ptr();
       } else if(delta > 15) {
         // Send as 8 bit value
@@ -166,4 +230,5 @@ void TIM2_IRQHandler() {
     }
     previous_timer_value = timer_value;
   }
+  TIM2->SR    = 0;
 }
