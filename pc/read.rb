@@ -14,8 +14,12 @@ def send_command(handle, command, value = 0)
 end
 
 def read_data(handle)
-  handle.bulk_transfer(:endpoint => 0x81, :dataIn => 1024*1024, :timeout => 10000)
+  handle.bulk_transfer(:endpoint => 0x81, :dataIn => 1024*1024, :timeout => 2000)
 end
+
+start_track  = 0
+end_track    = 159
+revolutions  = 2
 
 usb = LIBUSB::Context.new
 device = usb.devices(idVendor: 0x1209, idProduct: 0x0001).first
@@ -27,13 +31,14 @@ device.open_interface(0) do |handle|
   # Zero head
   send_command(handle, COMMAND_ZERO_HEAD)
 
-  (0..159).each do |track|
+  (start_track..end_track).each do |track|
+    STDERR.puts "Reading Track #{track}"
     # Seek track
     send_command(handle, COMMAND_SEEK_HEAD, track)
     sleep 0.01
 
     # Read 40,000,000 cycles - 0.5s
-    send_command(handle, COMMAND_READ_RAW, 20)
+    send_command(handle, COMMAND_READ_RAW, 16 * revolutions)
 
     track_data = read_data(handle)
     STDOUT.write ['T', track, track_data.bytesize].pack('aCN')

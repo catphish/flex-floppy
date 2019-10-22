@@ -81,10 +81,12 @@ uint32_t ep_rx_ready(uint32_t ep) {
 void usb_read(uint8_t ep, volatile char * buffer) {
   ep &= 0x7f;
   while(!ep_rx_ready(ep));
-  uint32_t rxBufferAddr = USBBUFTABLE->ep_desc[ep].rxBufferAddr;
-  uint32_t len = USBBUFTABLE->ep_desc[ep].rxBufferCount & 0x03ff;
-  for(int n=0; n<len; n+=2) {
-    *(uint16_t *)(buffer + n) = *(uint16_t *)(USBBUFRAW+rxBufferAddr+n);
+  if(buffer) {
+    uint32_t rxBufferAddr = USBBUFTABLE->ep_desc[ep].rxBufferAddr;
+    uint32_t len = USBBUFTABLE->ep_desc[ep].rxBufferCount & 0x03ff;
+    for(int n=0; n<len; n+=2) {
+      *(uint16_t *)(buffer + n) = *(uint16_t *)(USBBUFRAW+rxBufferAddr+n);
+    }
   }
   // Clear CTR_RX and toggle NAK->VALID
   USB_EPR(ep) = (USB_EPR(ep) & 0x378f) ^ 0x3000;

@@ -160,19 +160,17 @@ void terminate_data() {
 }
 
 void TIM2_IRQHandler() {
-if(task == 8) {
+  if(task == 8) {
     // Write to TIM2->CH4 (actually we set TIM2->ARR)
     uint8_t b0 = ((uint8_t*)data)[data_out_ptr];
+    increment_data_out_ptr();
     if(b0 > 0x0f) {
-      TIM2->ARR = b0;
-      // This is nasty. The statement above happens
-      // ASAP in this interrupt. If the value is too
-      // small, we might be too late. Limit it to 100.
-      if(b0 < 100)
-        overflow = 1;
-      increment_data_out_ptr();
+      if(b0 < 120) {
+        TIM2->ARR = 120;
+      } else {
+        TIM2->ARR = b0;
+      }
     } else if(b0 == 0x0f) {
-      increment_data_out_ptr();
       uint32_t tval;
       tval  = ((uint8_t*)data)[data_out_ptr]; tval <<= 8;
       increment_data_out_ptr();
@@ -184,14 +182,13 @@ if(task == 8) {
       increment_data_out_ptr();
       TIM2->ARR = tval;
     } else if(b0 > 0) {
-      increment_data_out_ptr();
       uint32_t tval;
       tval  = b0; tval <<= 8;
       tval |= ((uint8_t*)data)[data_out_ptr];
-      TIM2->ARR = tval;
       increment_data_out_ptr();
+      TIM2->ARR = tval;
     }
-    if(b0 == 0 || overflow ) {
+    if((b0 == 0) || overflow ) {
       TIM2->CR1  = 0;
       TIM2->DIER = 0;
       floppy_write_disable();

@@ -14,11 +14,11 @@ def send_command(handle, command, value = 0)
 end
 
 def read_data(handle)
-  handle.bulk_transfer(:endpoint => 0x81, :dataIn => 1024*1024, :timeout => 10000)
+  handle.bulk_transfer(:endpoint => 0x81, :dataIn => 1024*1024, :timeout => 2000)
 end
 
 def write_data(handle, data)
-  handle.bulk_transfer(:endpoint => 0x01, :dataOut => data, :timeout => 10000)
+  handle.bulk_transfer(:endpoint => 0x01, :dataOut => data, :timeout => 2000)
 end
 
 usb = LIBUSB::Context.new
@@ -33,14 +33,9 @@ device.open_interface(0) do |handle|
 
   while(header = STDIN.read(6))
     _, track, length = header.unpack('CCN')
-    puts [track, length].inspect
+    STDERR.puts "Writing Track #{track}"
 
     data = STDIN.read(length)
-    #data = data[0, 2] * 200000
-    #data << [0x0, 0x0].pack('CC')
-    #puts data.bytes.inspect
-    #data = [0x01,0x80].pack('CC')*(length/2)
-    #data += [0x0, 0x0].pack('CC')
 
     # Seek track
     send_command(handle, COMMAND_SEEK_HEAD, track)
@@ -52,7 +47,7 @@ device.open_interface(0) do |handle|
     # Send data
     track_data = write_data(handle, data)
     result = read_data(handle)
-    puts result.bytes.inspect
+    puts " Buffer error" unless result == "\0\0"
   end
 
   # Disable drive

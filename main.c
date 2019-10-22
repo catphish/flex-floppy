@@ -113,6 +113,10 @@ int main() {
     }
     
     if(task == 9) { // End write
+      if(ep_rx_ready(0x01)) {
+        // Discard
+        usb_read(0x01, 0);
+      }
       if(ep_tx_ready(0x81)) {
         if(overflow)
           usb_write(0x81, "\0\1", 2);
@@ -122,5 +126,11 @@ int main() {
       }
     }
 
+    if(task != 7 && task != 8) { // Discarding data
+      if(ep_rx_ready(0x01)) {
+        // Discard
+        usb_read(0x01, 0);
+      }
+    }
   }
 }
