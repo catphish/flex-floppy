@@ -1,20 +1,18 @@
 #include <stdint.h>
 
-#define MEMORY_SIZE 8192
-
 void floppy_init();
-void handle_ep1();
+
+void floppy_track_minus();
+void floppy_track_plus();
+void floppy_set_side(uint8_t side);
+void floppy_track_zero();
+void floppy_track_seek(uint8_t target);
 
 void floppy_enable();
 void floppy_disable();
 void floppy_write_enable();
 void floppy_write_disable();
 
-void disable_timer();
-void floppy_start_read();
-void floppy_prepare_write();
-void floppy_start_write();
-
-void track_zero();
-void track_seek(uint8_t target);
-void terminate_data();
+void floppy_main_loop();
+void floppy_handle_ep0(char * packet);
+void floppy_handle_ep1();

@@ -14,11 +14,11 @@ def send_command(handle, command, value = 0)
 end
 
 def read_data(handle)
-  handle.bulk_transfer(:endpoint => 0x81, :dataIn => 1024*1024, :timeout => 2000)
+  handle.bulk_transfer(:endpoint => 0x81, :dataIn => 1024*1024, :timeout => 5000)
 end
 
 def write_data(handle, data)
-  handle.bulk_transfer(:endpoint => 0x01, :dataOut => data, :timeout => 2000)
+  handle.bulk_transfer(:endpoint => 0x01, :dataOut => data, :timeout => 5000)
 end
 
 usb = LIBUSB::Context.new

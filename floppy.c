@@ -5,12 +5,14 @@
 #include "usb.h"
 #include "util.h"
 
-volatile extern uint8_t task;
 volatile uint32_t previous_timer_value;
-volatile uint8_t headpos = 0;
-volatile uint8_t overflow;
+volatile uint32_t read_length;
+volatile uint8_t headpos;
+volatile uint8_t task;
+volatile uint8_t status;
 
-volatile char data[MEMORY_SIZE];
+#define MEMORY_SIZE 8192
+volatile uint16_t data[MEMORY_SIZE];
 volatile uint16_t data_in_ptr  = 0;
 volatile uint16_t data_out_ptr = 0;
 
@@ -37,9 +39,11 @@ void floppy_init() {
 
   gpio_port_mode(GPIOB, 14, 1, 0, 0, 1); // B14 MOTOR     OUT
   gpio_port_mode(GPIOB, 15, 1, 0, 0, 1); // B15 ENABLE    OUT
+
+  task = 0;
 }
 
-void track_minus() {
+void floppy_track_minus() {
   GPIOB->BSRR = (1<<13);
   GPIOB->BSRR = (1<<(16+12));
   msleep(10);
@@ -48,7 +52,7 @@ void track_minus() {
   headpos--;
 }
 
-void track_plus() {
+void floppy_track_plus() {
   GPIOB->BSRR = (1<<(16+13));
   GPIOB->BSRR = (1<<(16+12));
   msleep(10);
@@ -57,21 +61,21 @@ void track_plus() {
   headpos++;
 }
 
-void set_side(uint8_t side) {
+void floppy_set_side(uint8_t side) {
   GPIOA->BSRR = (1 << (16 * side + 2));
 }
 
-void track_zero() {
-  track_plus();
-  while(GPIOB->IDR & (1<<1)) track_minus();
+void floppy_track_zero() {
+  floppy_track_plus();
+  while(GPIOB->IDR & (1<<1)) floppy_track_minus();
   headpos = 0;
 }
 
-void track_seek(uint8_t target) {
+void floppy_track_seek(uint8_t target) {
   uint8_t target_headpos = target / 2;
-  while(headpos < target_headpos) track_plus();
-  while(headpos > target_headpos) track_minus();
-  set_side(target % 2);
+  while(headpos < target_headpos) floppy_track_plus();
+  while(headpos > target_headpos) floppy_track_minus();
+  floppy_set_side(target % 2);
 }
 
 void floppy_enable() {
@@ -89,14 +93,10 @@ void floppy_write_disable() {
   GPIOB->BSRR = (1<<(2));    // Write disable!
 }
 
-void disable_timer() {
+void floppy_start_read() {
   // Disable TIM2 and interrupts
   TIM2->CR1   = 0;
   TIM2->DIER  = 0;
-}
-
-void floppy_start_read() {
-  disable_timer();
 
   // Configure TIM2 CH3 as input capture
   TIM2->CCMR2 = 1;
@@ -108,7 +108,10 @@ void floppy_start_read() {
   previous_timer_value = 0;
   data_in_ptr   = 0;
   data_out_ptr  = 0;
-  overflow      = 0;
+
+  // Set current task and clear status
+  task   = 0x21;
+  status = 0;
 
   // Reset interrupts and enable TIM2
   TIM2->SR    = 0;
@@ -116,116 +119,99 @@ void floppy_start_read() {
   TIM2->DIER  = (1<<3);
 }
 
-void floppy_prepare_write() {
-  disable_timer();
+void floppy_main_loop() {
+  if(task == 0x21) { // Reading
+    // Stop reading after fixed interval
+    if(TIM2->CNT >= read_length) status = 1;
 
-  // Configure TIM2 CH4 as PWM output (mode 1)
-  TIM2->CCMR2 = (6<<12);
-  TIM2->CCER  = (1<<12) | (1<<13);
-  TIM2->CNT   = 0;
-  TIM2->CCR4  = 160; // 2us pulse
+    // Check if we're approaching an overflow
+    int32_t free = (int32_t)data_out_ptr - (int32_t)data_in_ptr;
+    if(free < 0) free += MEMORY_SIZE;
+    if(free && free < 16) status = 2;
 
-  // Zero the counters
-  data_in_ptr   = 0;
-  data_out_ptr  = 0;
-  overflow      = 0;
+    // Check if we have data to send
+    if(usb_tx_ready(0x81)) {
+      if((data_in_ptr >= (data_out_ptr + 32)) || (data_in_ptr < data_out_ptr)) {
+        usb_write(0x81, (char *)(data + data_out_ptr), 64);
+        data_out_ptr = (data_out_ptr + 32) % MEMORY_SIZE;
+      }
+    }
+
+    if(status) {
+      // Terminate stream with status
+      data[data_in_ptr] = status;
+      data_in_ptr = (data_in_ptr + 1) % MEMORY_SIZE;
+      // Disable TIM2 and interrupts
+      TIM2->CR1   = 0;
+      TIM2->DIER  = 0;
+      // Advance to next task
+      task = 0x22;
+    }
+  }
+
+  if(task == 0x22) { // Done reading, finish streaming.
+    // Finish streaming data to USB
+    if(usb_tx_ready(0x81)) {
+      if((data_in_ptr >= (data_out_ptr + 32)) || (data_in_ptr < data_out_ptr)) {
+        usb_write(0x81, (char *)(data + data_out_ptr), 64);
+        data_out_ptr = (data_out_ptr + 32) % MEMORY_SIZE;
+      } else {
+        uint16_t remaining_data = data_in_ptr - data_out_ptr;
+        usb_write(0x81, (char *)(data + data_out_ptr), remaining_data * 2);
+        task = 0;
+      }
+    }
+  }
 }
 
-void floppy_start_write() {
-  // Arm the death ray
-  floppy_write_enable();
-  // Enable timer
-  TIM2->ARR   = 0xffffffff;
-  TIM2->DIER  = 1;
-  TIM2->SR    = 0;
-  TIM2->CR1   = 1;
-  TIM2->EGR   = 1;
+void floppy_handle_ep0(char * packet) {
+  uint8_t bRequest = packet[1];
+
+  // Enable Drive
+  if(bRequest == 0x01) {
+    task = 0;
+    floppy_enable();
+    usb_write(0,0,0);
+  }
+  // Disble Drive
+  if(bRequest == 0x02) {
+    task = 0;
+    floppy_disable();
+    usb_write(0,0,0);
+  }
+  // Zero Head
+  if(bRequest == 0x11) {
+    // This is a slow blocking operation!
+    floppy_track_zero();
+    usb_write(0,0,0);
+  }  // Seek Head
+  if(bRequest == 0x12) {
+    // This is a slow blocking operation!
+    floppy_track_seek(packet[2]);
+    usb_write(0,0,0);
+  }
+  // Read Track
+  if(bRequest == 0x21) {
+    read_length  = (uint32_t)packet[2] * 1000000;
+    floppy_start_read();
+    usb_write(0,0,0);
+  }
+  // Write Track
+  if(bRequest == 0x31) {
+    //floppy_prepare_write();
+    usb_write(0,0,0);
+  }
 }
 
-static inline void increment_data_in_ptr() {
-  data_in_ptr = (data_in_ptr + 1) % MEMORY_SIZE;
-  if(data_in_ptr == data_out_ptr) overflow = 1;
-}
+void floppy_handle_ep1() {
 
-static inline void increment_data_out_ptr() {
-  data_out_ptr = (data_out_ptr + 1) % MEMORY_SIZE;
-  if(data_out_ptr == data_in_ptr) overflow = 1;
-}
-
-void terminate_data() {
-  data[data_in_ptr] = 0;
-  increment_data_in_ptr();
-  data[data_in_ptr] = overflow;
-  increment_data_in_ptr();
 }
 
 void TIM2_IRQHandler() {
-  if(task == 8) {
-    // Write to TIM2->CH4 (actually we set TIM2->ARR)
-    uint8_t b0 = ((uint8_t*)data)[data_out_ptr];
-    increment_data_out_ptr();
-    if(b0 > 0x0f) {
-      if(b0 < 120) {
-        TIM2->ARR = 120;
-      } else {
-        TIM2->ARR = b0;
-      }
-    } else if(b0 == 0x0f) {
-      uint32_t tval;
-      tval  = ((uint8_t*)data)[data_out_ptr]; tval <<= 8;
-      increment_data_out_ptr();
-      tval |= ((uint8_t*)data)[data_out_ptr]; tval <<= 8;
-      increment_data_out_ptr();
-      tval |= ((uint8_t*)data)[data_out_ptr]; tval <<= 8;
-      increment_data_out_ptr();
-      tval |= ((uint8_t*)data)[data_out_ptr];
-      increment_data_out_ptr();
-      TIM2->ARR = tval;
-    } else if(b0 > 0) {
-      uint32_t tval;
-      tval  = b0; tval <<= 8;
-      tval |= ((uint8_t*)data)[data_out_ptr];
-      increment_data_out_ptr();
-      TIM2->ARR = tval;
-    }
-    if((b0 == 0) || overflow ) {
-      TIM2->CR1  = 0;
-      TIM2->DIER = 0;
-      floppy_write_disable();
-      task = 9;
-    }
-  }
+  TIM2->SR = 0;
 
-  if(task == 5) {
-    // Read from TIM2->CH3
-    uint32_t timer_value = TIM2->CCR3;
-    if(previous_timer_value) {
-      uint32_t delta = timer_value - previous_timer_value;
-      if(delta > 3839) {
-        // Send as 32-bit value
-        data[data_in_ptr] = 0xf;
-        increment_data_in_ptr();
-        data[data_in_ptr] = (delta & 0xff000000) >> 24;
-        increment_data_in_ptr();
-        data[data_in_ptr] = (delta & 0x00ff0000) >> 16;
-        increment_data_in_ptr();
-        data[data_in_ptr] = (delta & 0x0000ff00) >> 8;
-        increment_data_in_ptr();
-        data[data_in_ptr] = (delta & 0x000000ff) >> 0;
-        increment_data_in_ptr();
-      } else if (delta > 255) {
-        // Send as 16 bit value
-        data[data_in_ptr] = (delta & 0x0000ff00) >> 8;
-        increment_data_in_ptr();
-        data[data_in_ptr] = (delta & 0x000000ff) >> 0;
-        increment_data_in_ptr();
-      } else if(delta > 15) {
-        // Send as 8 bit value
-        data[data_in_ptr++] = delta;
-        increment_data_in_ptr();
-      }
-    }
-    previous_timer_value = timer_value;
+  if(task == 0x21) { // Read from TIM2->CH3
+    data[data_in_ptr] = TIM2->CCR3;
+    data_in_ptr = (data_in_ptr + 1) % MEMORY_SIZE;
   }
-  TIM2->SR    = 0;
 }

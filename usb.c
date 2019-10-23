@@ -6,10 +6,6 @@
 #include "gpio.h"
 #include "floppy.h"
 
-extern volatile uint8_t task;
-extern volatile uint8_t target_track;
-extern volatile uint32_t read_length;
-
 uint32_t buffer_pointer = 64;
 uint8_t pending_addr = 0;
 
@@ -48,9 +44,9 @@ void usb_configure_ep(uint8_t ep, uint32_t type, uint32_t size) {
   ep &= 0x7f;
 
   uint32_t old_epr = USB_EPR(ep);
-  uint32_t new_epr = 0; // Always write 1 to bits 15 and 8 for no effect.
-  new_epr |= (type << 9);    // Set type
-  new_epr |= ep;             // Set endpoint number
+  uint32_t new_epr = 0;    // Always write 1 to bits 15 and 8 for no effect.
+  new_epr |= (type << 9);  // Set type
+  new_epr |= ep;           // Set endpoint number
 
   if(in || ep == 0) {
     USBBUFTABLE->ep_desc[ep].txBufferAddr = buffer_pointer;
@@ -68,19 +64,19 @@ void usb_configure_ep(uint8_t ep, uint32_t type, uint32_t size) {
   USB_EPR(ep) = new_epr;
 }
 
-uint32_t ep_tx_ready(uint32_t ep) {
+uint32_t usb_tx_ready(uint32_t ep) {
   ep &= 0x7f;
   return((USB_EPR(ep) & 0x30) == 0x20);
 }
 
-uint32_t ep_rx_ready(uint32_t ep) {
+uint32_t usb_rx_ready(uint32_t ep) {
   ep &= 0x7f;
   return((USB_EPR(ep) & 0x3000) == 0x2000);
 }
 
 void usb_read(uint8_t ep, volatile char * buffer) {
   ep &= 0x7f;
-  while(!ep_rx_ready(ep));
+  while(!usb_rx_ready(ep));
   if(buffer) {
     uint32_t rxBufferAddr = USBBUFTABLE->ep_desc[ep].rxBufferAddr;
     uint32_t len = USBBUFTABLE->ep_desc[ep].rxBufferCount & 0x03ff;
@@ -94,7 +90,7 @@ void usb_read(uint8_t ep, volatile char * buffer) {
 
 void usb_write(uint8_t ep, volatile char * buffer, uint32_t len) {
   ep &= 0x7f;
-  while(!ep_tx_ready(ep));
+  while(!usb_tx_ready(ep));
   uint32_t txBufferAddr = USBBUFTABLE->ep_desc[ep].txBufferAddr;
   for(int n=0; n<len; n+=2) {
     *(volatile uint16_t *)(USBBUFRAW+txBufferAddr+n) = *(uint16_t *)(buffer + n);
@@ -119,15 +115,7 @@ void usb_reset() {
   USB->DADDR = USB_DADDR_EF;
 }
 
-void usb_handle_tx_complete() {
-  // TX
-  if(pending_addr) {
-    USB->DADDR = USB_DADDR_EF | pending_addr;
-    pending_addr = 0;
-  }
-}
-
-void handle_ep0() {
+void usb_handle_ep0() {
   char packet[64];
   usb_read(0, packet);
 
@@ -160,43 +148,35 @@ void handle_ep0() {
     usb_write(0,0,0);
   }
 
-  // Enable Drive
-  if(bmRequestType == 0x41 && bRequest == 0x01) {
-    task = 0;
-    floppy_enable();
-    usb_write(0,0,0);
+  if(bmRequestType == 0x41)
+    floppy_handle_ep0(packet);
+
+}
+
+void usb_main_loop() {
+  // USB reset
+  if(USB->ISTR & USB_ISTR_RESET) {
+    usb_reset();
   }
-  // Disble Drive
-  if(bmRequestType == 0x41 && bRequest == 0x02) {
-    task = 0;
-    floppy_disable();
-    usb_write(0,0,0);
-  }
-  // Zero Head
-  if(bmRequestType == 0x41 && bRequest == 0x11) {
-    // This is a slow blocking operation!
-    task = 0;
-    track_zero();
-    usb_write(0,0,0);
-  }
-  // Seek Head
-  if(bmRequestType == 0x41 && bRequest == 0x12) {
-    // This is a slow blocking operation!
-    task = 0;
-    track_seek(packet[2]);
-    usb_write(0,0,0);
-  }
-  // Read Track
-  if(bmRequestType == 0x41 && bRequest == 0x21) {
-    read_length  = (uint32_t)packet[2] * 1000000;
-    task = 5;
-    floppy_start_read();
-    usb_write(0,0,0);
-  }
-  // Write Track
-  if(bmRequestType == 0x41 && bRequest == 0x31) {
-    task = 7;
-    floppy_prepare_write();
-    usb_write(0,0,0);
+
+  // USB packet transfer complete
+  if(USB->ISTR & USB_ISTR_CTR) {
+    uint32_t ep = USB->ISTR & 0xf;
+    if(USB->ISTR & 0x10) { // RX
+      if(ep == 0) {
+        // Control data waiting
+        usb_handle_ep0();
+      } else if (ep == 1) {
+        // Bulk data waiting
+        floppy_handle_ep1();
+      }
+    } else { // TX
+      if(pending_addr) {
+        USB->DADDR = USB_DADDR_EF | pending_addr;
+        pending_addr = 0;
+      }
+      // Clear pending state
+      USB_EPR(ep) &= 0x870f;
+    }
   }
 }
