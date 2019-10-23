@@ -43,13 +43,10 @@ device.open_interface(0) do |handle|
 
     # Receive data stream
     track_data = read_data(handle)
-    if track_data.bytesize < 10
-      STDERR.puts track_data.bytes.inspect
-    else
-      STDERR.puts "..." + track_data.bytes[-10..-1].inspect
-    end
     track_data_n = track_data.unpack('S<*')
+
     status = track_data_n.pop
+    raise "Buffer overflow error" unless status == 1
 
     # Convert cumulative times to deltas
     track_data_n = track_data_n.each_cons(2).map { |a,b| b-a }

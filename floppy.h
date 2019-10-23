@@ -13,6 +13,10 @@ void floppy_disable();
 void floppy_write_enable();
 void floppy_write_disable();
 
+void floppy_start_read();
+void floppy_start_write();
+void floppy_really_start_write();
+
 void floppy_main_loop();
 void floppy_handle_ep0(char * packet);
 void floppy_handle_ep1();

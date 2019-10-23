@@ -119,6 +119,44 @@ void floppy_start_read() {
   TIM2->DIER  = (1<<3);
 }
 
+void floppy_start_write() {
+  // Disable TIM2 and interrupts
+  TIM2->CR1   = 0;
+  TIM2->DIER  = 0;
+
+  // Configure TIM2 CH4 as PWM output (mode 1)
+  TIM2->CCMR2 = (6<<12);
+  TIM2->CCER  = (1<<12) | (1<<13);
+  TIM2->CNT   = 0;
+  TIM2->CCR4  = 160; // 2us pulse
+  TIM2->ARR   = 0xffffffff;
+
+  // Reset counters
+  data_in_ptr = 0;
+  data_out_ptr = 0;
+
+  // Set current task and clear status
+  task   = 0x31;
+  status = 0;
+}
+
+void floppy_really_start_write() {
+  // Set current task
+  task   = 0x32;
+
+  // Arm the death ray
+  floppy_write_enable();
+
+  // Enable timer
+  TIM2->DIER  = 1;
+  TIM2->SR    = 0;
+  TIM2->CR1   = 1;
+  TIM2->EGR   = 1;
+}
+
+// This is the main loop.
+// It handles general operation monitoring and USB transmit.
+// USB receive and timers are handled in separate functions.
 void floppy_main_loop() {
   if(task == 0x21) { // Reading
     // Stop reading after fixed interval
@@ -162,6 +200,23 @@ void floppy_main_loop() {
       }
     }
   }
+
+  if(task == 0x32) { // Writing
+    if(status) {
+      // Disable TIM2 and interrupts
+      TIM2->CR1   = 0;
+      TIM2->DIER  = 0;
+      // Advance to next task
+      task = 0x33;
+    }
+  }
+
+  if(task == 0x33) { // Confirm write status
+    if(usb_tx_ready(0x81)) {
+      usb_write(0x81, (char *)&status, 2);
+      task = 0;
+    }
+  }
 }
 
 void floppy_handle_ep0(char * packet) {
@@ -198,17 +253,50 @@ void floppy_handle_ep0(char * packet) {
   }
   // Write Track
   if(bRequest == 0x31) {
-    //floppy_prepare_write();
+    floppy_start_write();
     usb_write(0,0,0);
   }
 }
 
 void floppy_handle_ep1() {
+  if(task == 0x31) {
+    // Receive data stream and pre-fill ring buffer
+    usb_read(0x01, (char *)(data + data_in_ptr));
+    data_in_ptr += 32;
 
+    if(data_in_ptr == MEMORY_SIZE) {
+      // Buffer full. Start writing.
+      data_in_ptr = 0;
+      floppy_really_start_write();
+    }
+  } else if(task == 0x32) {
+    // Receive data stream and continue to write disk
+    if((data_out_ptr >= (data_in_ptr + 32)) || (data_out_ptr < data_in_ptr)) {
+      usb_read(0x01, (char *)(data + data_in_ptr));
+      data_in_ptr = (data_in_ptr + 32) % MEMORY_SIZE;
+    }
+  } else {
+    usb_read(0x01, 0); // Discard
+  }
 }
 
 void TIM2_IRQHandler() {
   TIM2->SR = 0;
+
+  if(task == 0x32) { // Write to TIM2->ARR
+    uint16_t t = data[data_out_ptr];
+    if(t) {
+      TIM2->ARR = t;
+    } else { // EOF
+      floppy_write_disable();
+      status = 1;
+    }
+    data_out_ptr = (data_out_ptr + 1) % MEMORY_SIZE;
+    if(data_out_ptr == data_in_ptr) {
+      floppy_write_disable();
+      status = 2;      
+    }
+  }
 
   if(task == 0x21) { // Read from TIM2->CH3
     data[data_in_ptr] = TIM2->CCR3;
