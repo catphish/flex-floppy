@@ -299,7 +299,9 @@ void TIM2_IRQHandler() {
   }
 
   if(task == 0x21) { // Read from TIM2->CH3
-    data[data_in_ptr] = TIM2->CCR3;
-    data_in_ptr = (data_in_ptr + 1) % MEMORY_SIZE;
+    if(!status) {
+      data[data_in_ptr] = TIM2->CCR3;
+      data_in_ptr = (data_in_ptr + 1) % MEMORY_SIZE;
+    }
   }
 }

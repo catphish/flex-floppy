@@ -45,10 +45,11 @@ device.open_interface(0) do |handle|
     send_command(handle, COMMAND_WRITE_RAW)
 
     # Send data
-    write_data(handle, ([300].pack('S<') * (8192*10))+"\0\0")
-    #write_data(handle, data + "\0\0")
+    #write_data(handle, ([320].pack('S<') * (8192*10))+"\0\0")
+    data = data.unpack('n*').pack('S<*')
+    write_data(handle, data + "\0\0")
     status = read_data(handle)
-    raise "Buffer underrun error" unless status == "\1\0"
+    STDERR.puts status.bytes.inspect
   end
 
   # Disable drive
