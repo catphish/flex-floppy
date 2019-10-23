@@ -39,7 +39,7 @@ void usb_init() {
 }
 
 // Types: 0=Bulk,1=Control,2=Iso,3=Interrupt
-void usb_configure_ep(uint8_t ep, uint32_t type, uint32_t size) {
+void usb_configure_ep(uint8_t ep, uint32_t type) {
   uint8_t in = ep & 0x80;
   ep &= 0x7f;
 
@@ -50,14 +50,14 @@ void usb_configure_ep(uint8_t ep, uint32_t type, uint32_t size) {
 
   if(in || ep == 0) {
     USBBUFTABLE->ep_desc[ep].txBufferAddr = buffer_pointer;
-    buffer_pointer += size;
+    buffer_pointer += 64;
     new_epr |= (old_epr & 0x0030) ^ 0x0020;
   }
 
   if(!in) {
     USBBUFTABLE->ep_desc[ep].rxBufferAddr = buffer_pointer;
-    buffer_pointer += size;
     USBBUFTABLE->ep_desc[ep].rxBufferCount = (1<<15) | (1 << 10);
+    buffer_pointer += 64;
     new_epr |= (old_epr & 0x3000) ^ 0x3000;
   }
 
@@ -69,18 +69,11 @@ uint32_t usb_tx_ready(uint32_t ep) {
   return((USB_EPR(ep) & 0x30) == 0x20);
 }
 
-uint32_t usb_rx_ready(uint32_t ep) {
-  ep &= 0x7f;
-  return((USB_EPR(ep) & 0x3000) == 0x2000);
-}
-
 void usb_read(uint8_t ep, volatile char * buffer) {
   ep &= 0x7f;
-  while(!usb_rx_ready(ep));
   if(buffer) {
     uint32_t rxBufferAddr = USBBUFTABLE->ep_desc[ep].rxBufferAddr;
-    uint32_t len = USBBUFTABLE->ep_desc[ep].rxBufferCount & 0x03ff;
-    for(int n=0; n<len; n+=2) {
+    for(int n=0; n<64; n+=2) {
       *(uint16_t *)(buffer + n) = *(uint16_t *)(USBBUFRAW+rxBufferAddr+n);
     }
   }
@@ -105,9 +98,9 @@ void usb_reset() {
   USB->ISTR &= ~USB_ISTR_RESET;
   buffer_pointer = 64;
 
-  usb_configure_ep(0, 1, 64);
-  usb_configure_ep(0x01, 0, 64);
-  usb_configure_ep(0x81, 0, 64);
+  usb_configure_ep(0x00, 0x1);
+  usb_configure_ep(0x01, 0x0);
+  usb_configure_ep(0x81, 0x0);
 
   USB->BTABLE = 0;
 

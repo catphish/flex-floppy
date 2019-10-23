@@ -38,8 +38,8 @@ device.open_interface(0) do |handle|
     send_command(handle, COMMAND_SEEK_HEAD, track)
     sleep 0.01
 
-    # Read 16M cycles per revolution
-    send_command(handle, COMMAND_READ_RAW, 16 * revolutions)
+    # Read 8M (40MHz) cycles per revolution
+    send_command(handle, COMMAND_READ_RAW, 8 * revolutions)
 
     # Receive data stream
     track_data = read_data(handle)

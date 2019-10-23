@@ -7,11 +7,11 @@
 
 volatile uint32_t previous_timer_value;
 volatile uint32_t read_length;
+volatile uint16_t status;
 volatile uint8_t headpos;
 volatile uint8_t task;
-volatile uint8_t status;
 
-#define MEMORY_SIZE 8192
+#define MEMORY_SIZE (1024*16)
 volatile uint16_t data[MEMORY_SIZE];
 volatile uint16_t data_in_ptr  = 0;
 volatile uint16_t data_out_ptr = 0;
@@ -98,6 +98,10 @@ void floppy_start_read() {
   TIM2->CR1   = 0;
   TIM2->DIER  = 0;
 
+  // Set prescaler
+  TIM2->PSC   = 1;
+  TIM2->EGR   = 1;
+
   // Configure TIM2 CH3 as input capture
   TIM2->CCMR2 = 1;
   TIM2->CCER  = (1<<8) | (1<<9);
@@ -123,6 +127,10 @@ void floppy_start_write() {
   // Disable TIM2 and interrupts
   TIM2->CR1   = 0;
   TIM2->DIER  = 0;
+
+  // Set prescaler
+  TIM2->PSC   = 1;
+  TIM2->EGR   = 1;
 
   // Configure TIM2 CH4 as PWM output (mode 1)
   TIM2->CCMR2 = (6<<12);
@@ -291,8 +299,9 @@ void TIM2_IRQHandler() {
       floppy_write_disable();
       status = 1;
     }
+    
     data_out_ptr = (data_out_ptr + 1) % MEMORY_SIZE;
-    if(data_out_ptr == data_in_ptr) {
+    if(!status && data_out_ptr == data_in_ptr) {
       floppy_write_disable();
       status = 2;      
     }

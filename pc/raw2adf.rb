@@ -85,10 +85,8 @@ while STDIN.read(1)
   track = Track.new
 
   timings.each do |timing|
-    if timing > 160 && timing < 800
-      bits = (timing - 80) / 160
-      break if track.process_bits([0]*bits + [1])
-    end
+    bits = (timing - 40) / 80
+    break if track.process_bits([0]*bits + [1])
   end
   STDOUT.write track.data
 end

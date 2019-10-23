@@ -36,20 +36,26 @@ device.open_interface(0) do |handle|
     STDERR.puts "Writing Track #{track}"
 
     data = STDIN.read(length)
+    data = data.unpack('n*').pack('S<*')
 
     # Seek track
     send_command(handle, COMMAND_SEEK_HEAD, track)
     sleep 0.01
 
-    # Begin write
-    send_command(handle, COMMAND_WRITE_RAW)
+    loop do
+      # Begin write
+      send_command(handle, COMMAND_WRITE_RAW)
 
-    # Send data
-    #write_data(handle, ([320].pack('S<') * (8192*10))+"\0\0")
-    data = data.unpack('n*').pack('S<*')
-    write_data(handle, data + "\0\0")
-    status = read_data(handle)
-    STDERR.puts status.bytes.inspect
+      # Send data
+      write_data(handle, data + "\0\0")
+      status = read_data(handle)
+      if status == "\1\0"
+        break
+      else
+        sleep 0.5
+        STDERR.puts "Buffer underrun. Retrying..."
+      end
+    end
   end
 
   # Disable drive
