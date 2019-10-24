@@ -1,0 +1,37 @@
+=================================
+USB Multi-pupose Floppy Interface
+=================================
+
+This device allows floppy disks to be read and written using a low cost
+USB interface and a generic floppy disk drive. It is targetted at
+Amiga floppy disks but may support others. Currently only DD disks
+are supported due to USB FS bandwidth constraints.
+
+Data is read and written in raw flux format and will be stored in SCP
+format for for maximum compatibility and flexibility.
+
+This project is a work in progress.
+
+
+Hardware TODO
+=============
+Add crystal
+Add BOOT0 button to allow USB DFU
+
+Firmware TODO
+=============
+Begin reads on index pulse
+Begin writes on index pulse
+
+
+Host TODO
+=========
+Proper CLI toolkit
+Read and write SCP image files
+USB protocol documentation
+
+Future development
+==================
+GUI
+DMA
+USB double buffering
