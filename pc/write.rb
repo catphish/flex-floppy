@@ -52,8 +52,8 @@ device.open_interface(0) do |handle|
       if status == "\1\0"
         break
       else
-        sleep 0.5
         STDERR.puts "Buffer underrun. Retrying..."
+        sleep 1
       end
     end
   end

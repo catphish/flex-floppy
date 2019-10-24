@@ -1,5 +1,10 @@
 #include <stdint.h>
 
+struct index_pulse {
+	uint32_t time;
+	uint32_t data_ptr;
+};
+
 void floppy_init();
 
 void floppy_track_minus();

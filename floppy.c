@@ -13,14 +13,24 @@ volatile uint8_t task;
 
 #define MEMORY_SIZE (1024*16)
 volatile uint16_t data[MEMORY_SIZE];
-volatile uint16_t data_in_ptr  = 0;
-volatile uint16_t data_out_ptr = 0;
+volatile uint16_t data_in_ptr;
+volatile uint16_t data_out_ptr;
+volatile uint32_t data_total_ptr;
+
+#define INDEX_PULSE_PACKETS 8
+#define MAX_INDEX_PULSES (INDEX_PULSE_PACKETS * 8)
+volatile uint16_t index_pulse_ptr;
+volatile struct index_pulse index_pulses[MAX_INDEX_PULSES];
 
 void floppy_init() {
   // TIM2
   RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN;
   NVIC->ISER[0] |= (1 << TIM2_IRQn);
   NVIC->IP[TIM2_IRQn] = 1;
+
+  // EXTI for INDEX on A8
+  EXTI->FTSR1 |= (1<<8);
+  NVIC->ISER[0] |= (1 << EXTI9_5_IRQn);
 
   gpio_port_mode(GPIOA, 1, 0, 0, 1, 0);  // A1  READY     IN
   gpio_port_mode(GPIOA, 2, 1, 0, 0, 1);  // A2  HEADSELET OUT
@@ -97,6 +107,7 @@ void floppy_start_read() {
   // Disable TIM2 and interrupts
   TIM2->CR1   = 0;
   TIM2->DIER  = 0;
+  EXTI->IMR1  = 0;
 
   // Set prescaler
   TIM2->PSC   = 1;
@@ -112,10 +123,21 @@ void floppy_start_read() {
   previous_timer_value = 0;
   data_in_ptr   = 0;
   data_out_ptr  = 0;
+  index_pulse_ptr = 0;
+  data_total_ptr  = 0;
+
+  // Flush index pulses
+  for(int n=0; n<MAX_INDEX_PULSES; n++) {
+    index_pulses[n].time = 0;
+    index_pulses[n].data_ptr = 0;
+  }
 
   // Set current task and clear status
   task   = 0x21;
   status = 0;
+
+  // Enable EXTI
+  EXTI->IMR1 = (1<<8);
 
   // Reset interrupts and enable TIM2
   TIM2->SR    = 0;
@@ -184,12 +206,11 @@ void floppy_main_loop() {
     }
 
     if(status) {
-      // Terminate stream with status
-      data[data_in_ptr] = status;
-      data_in_ptr = (data_in_ptr + 1) % MEMORY_SIZE;
       // Disable TIM2 and interrupts
       TIM2->CR1   = 0;
       TIM2->DIER  = 0;
+      EXTI->IMR1  = 0;
+
       // Advance to next task
       task = 0x22;
     }
@@ -204,8 +225,28 @@ void floppy_main_loop() {
       } else {
         uint16_t remaining_data = data_in_ptr - data_out_ptr;
         usb_write(0x81, (char *)(data + data_out_ptr), remaining_data * 2);
-        task = 0;
+        task = 0x23;
+        index_pulse_ptr = 0;
       }
+    }
+  }
+
+  if(task == 0x23) { // Done sending, send index pulse metadata
+    if(usb_tx_ready(0x81)) {
+      if(index_pulse_ptr < MAX_INDEX_PULSES) {
+        usb_write(0x81, (char *)(index_pulses + index_pulse_ptr), 64);
+        index_pulse_ptr += 8;
+      } else {
+        usb_write(0x81, 0, 0);
+        task = 0x24;
+      }
+    }
+  }
+
+  if(task == 0x24) { // Finally send the transfer status
+    if(usb_tx_ready(0x81)) {
+      usb_write(0x81, (char *)&status, 2);
+      task = 0;
     }
   }
 
@@ -311,6 +352,18 @@ void TIM2_IRQHandler() {
     if(!status) {
       data[data_in_ptr] = TIM2->CCR3;
       data_in_ptr = (data_in_ptr + 1) % MEMORY_SIZE;
+      data_total_ptr++;
     }
+  }
+}
+
+void EXTI9_5_IRQHandler() {
+  // Acknowledge interrupt
+  EXTI->PR1 = (1<<8);
+  // INDEX pulse detected
+  if(index_pulse_ptr < MAX_INDEX_PULSES) {
+    index_pulses[index_pulse_ptr].time = TIM2->CNT;
+    index_pulses[index_pulse_ptr].data_ptr = data_total_ptr;
+    index_pulse_ptr++;
   }
 }
