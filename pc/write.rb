@@ -21,6 +21,10 @@ def write_data(handle, data)
   handle.bulk_transfer(:endpoint => 0x01, :dataOut => data, :timeout => 5000)
 end
 
+f = File.open(ARGV[0], 'rb')
+f.seek(0x10)
+track_offsets = f.read(168*4).unpack('L<*')
+
 usb = LIBUSB::Context.new
 device = usb.devices(idVendor: 0x1209, idProduct: 0x0001).first
 device.open_interface(0) do |handle|
@@ -31,12 +35,21 @@ device.open_interface(0) do |handle|
   # Zero head
   send_command(handle, COMMAND_ZERO_HEAD)
 
-  while(header = STDIN.read(6))
-    _, track, length = header.unpack('CCN')
-    STDERR.puts "Writing Track #{track}"
+  track_offsets.each do |track_offset|
+    next if track_offset == 0
+    f.seek(track_offset)
+    track_header = f.read(16).unpack('a3CL<L<L<')
+    t,track,duration,bitcells,data_offset = track_header
+    if track > 159
+      STDERR.puts "Refusing to write track #{track}"
+      next
+    else
+      STDERR.puts "Writing Track #{track}"
+    end
 
-    data = STDIN.read(length)
-    data = data.unpack('n*').pack('S<*')
+    f.seek(track_offset + data_offset)
+    data = f.read(bitcells*2).unpack('S>*')
+    data = data.pack('S<*')
 
     # Seek track
     send_command(handle, COMMAND_SEEK_HEAD, track)
@@ -47,6 +60,7 @@ device.open_interface(0) do |handle|
       send_command(handle, COMMAND_WRITE_RAW)
 
       # Send data
+      #data = [160].pack('S<') * 62500
       write_data(handle, data + "\0\0")
       status = read_data(handle)
       if status == "\1\0"

@@ -2,4 +2,4 @@
 *.elf
 *.o
 pc/*.adf
-pc/*.raw
+pc/*.scp

@@ -158,7 +158,7 @@ void floppy_start_write() {
   TIM2->CCMR2 = (6<<12);
   TIM2->CCER  = (1<<12) | (1<<13);
   TIM2->CNT   = 0;
-  TIM2->CCR4  = 160; // 2us pulse
+  TIM2->CCR4  = 80; // 2us pulse
   TIM2->ARR   = 0xffffffff;
 
   // Reset counters
