@@ -13,25 +13,17 @@ format for for maximum compatibility and flexibility.
 This project is a work in progress.
 
 
-Hardware TODO
-=============
-Add crystal
-Add BOOT0 button to allow USB DFU
-
 Firmware TODO
 =============
-Begin reads on index pulse
 Begin writes on index pulse
-
 
 Host TODO
 =========
 Proper CLI toolkit
-Read and write SCP image files
+GUI
 USB protocol documentation
 
 Future development
 ==================
-GUI
 DMA
 USB double buffering
