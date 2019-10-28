@@ -1,6 +1,6 @@
 EESchema Schematic File Version 4
 LIBS:floppy-cache
-EELAYER 29 0
+EELAYER 30 0
 EELAYER END
 $Descr A4 11693 8268
 encoding utf-8
@@ -98,59 +98,6 @@ F 3 "" H 1050 2600 50  0001 C CNN
 $EndComp
 Wire Wire Line
 	1050 2200 1050 2300
-Text GLabel 3900 4400 2    50   Input ~ 0
-SWDIO
-Text GLabel 3900 4500 2    50   Input ~ 0
-SWCLK
-$Comp
-L Connector_Generic:Conn_01x05 J2
-U 1 1 5CCEA1DE
-P 5500 5450
-F 0 "J2" H 5580 5492 50  0000 L CNN
-F 1 "Conn_01x05" H 5580 5401 50  0000 L CNN
-F 2 "Connector_PinHeader_2.54mm:PinHeader_1x05_P2.54mm_Vertical" H 5500 5450 50  0001 C CNN
-F 3 "~" H 5500 5450 50  0001 C CNN
-	1    5500 5450
-	1    0    0    -1  
-$EndComp
-$Comp
-L power:+3V3 #PWR0107
-U 1 1 5CC8E915
-P 4750 5250
-F 0 "#PWR0107" H 4750 5100 50  0001 C CNN
-F 1 "+3V3" H 4765 5423 50  0000 C CNN
-F 2 "" H 4750 5250 50  0001 C CNN
-F 3 "" H 4750 5250 50  0001 C CNN
-	1    4750 5250
-	1    0    0    -1  
-$EndComp
-Text GLabel 5200 5350 0    50   Input ~ 0
-SWCLK
-Text GLabel 5200 5550 0    50   Input ~ 0
-SWDIO
-$Comp
-L power:GND #PWR0108
-U 1 1 5CC9035F
-P 4750 5450
-F 0 "#PWR0108" H 4750 5200 50  0001 C CNN
-F 1 "GND" H 4755 5277 50  0000 C CNN
-F 2 "" H 4750 5450 50  0001 C CNN
-F 3 "" H 4750 5450 50  0001 C CNN
-	1    4750 5450
-	1    0    0    -1  
-$EndComp
-Text GLabel 5200 5650 0    50   Input ~ 0
-NRST
-Wire Wire Line
-	5200 5650 5300 5650
-Wire Wire Line
-	5200 5550 5300 5550
-Wire Wire Line
-	4750 5450 5300 5450
-Wire Wire Line
-	5200 5350 5300 5350
-Wire Wire Line
-	4750 5250 5300 5250
 Wire Wire Line
 	6250 3600 6250 3700
 Connection ~ 6250 3600
@@ -387,17 +334,6 @@ F 3 "" H 1450 1150 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 Connection ~ 1450 1150
-$Comp
-L power:GND #PWR0112
-U 1 1 5CD0560A
-P 2600 2500
-F 0 "#PWR0112" H 2600 2250 50  0001 C CNN
-F 1 "GND" H 2605 2327 50  0000 C CNN
-F 2 "" H 2600 2500 50  0001 C CNN
-F 3 "" H 2600 2500 50  0001 C CNN
-	1    2600 2500
-	1    0    0    -1  
-$EndComp
 Wire Wire Line
 	2600 2500 2700 2500
 $Comp
@@ -533,4 +469,66 @@ F 3 "" H 5500 1200 50  0001 C CNN
 	1    0    0    -1  
 $EndComp
 Connection ~ 5500 1200
+$Comp
+L Connector_Generic:Conn_01x03 J2
+U 1 1 5DB90733
+P 1550 3350
+F 0 "J2" H 1630 3392 50  0000 L CNN
+F 1 "PROG" H 1630 3301 50  0000 L CNN
+F 2 "Connector_PinHeader_2.54mm:PinHeader_1x03_P2.54mm_Vertical" H 1550 3350 50  0001 C CNN
+F 3 "~" H 1550 3350 50  0001 C CNN
+	1    1550 3350
+	1    0    0    -1  
+$EndComp
+Text GLabel 2600 2500 0    50   Input ~ 0
+BOOT0
+Text GLabel 1050 3350 0    50   Input ~ 0
+BOOT0
+$Comp
+L power:+3V3 #PWR0107
+U 1 1 5DBA18E3
+P 1100 3250
+F 0 "#PWR0107" H 1100 3100 50  0001 C CNN
+F 1 "+3V3" H 1115 3423 50  0000 C CNN
+F 2 "" H 1100 3250 50  0001 C CNN
+F 3 "" H 1100 3250 50  0001 C CNN
+	1    1100 3250
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	1350 3350 1100 3350
+$Comp
+L Device:R R1
+U 1 1 5DBAF985
+P 1100 3600
+F 0 "R1" H 1170 3646 50  0000 L CNN
+F 1 "10k" H 1170 3555 50  0000 L CNN
+F 2 "Resistor_SMD:R_0603_1608Metric" V 1030 3600 50  0001 C CNN
+F 3 "~" H 1100 3600 50  0001 C CNN
+	1    1100 3600
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	1100 3450 1100 3350
+Wire Wire Line
+	1050 3350 1100 3350
+Connection ~ 1100 3350
+$Comp
+L power:GND #PWR0108
+U 1 1 5DBB270B
+P 1100 3750
+F 0 "#PWR0108" H 1100 3500 50  0001 C CNN
+F 1 "GND" H 1105 3577 50  0000 C CNN
+F 2 "" H 1100 3750 50  0001 C CNN
+F 3 "" H 1100 3750 50  0001 C CNN
+	1    1100 3750
+	1    0    0    -1  
+$EndComp
+Wire Wire Line
+	1100 3250 1350 3250
+Wire Wire Line
+	1100 3750 1350 3750
+Wire Wire Line
+	1350 3750 1350 3450
+Connection ~ 1100 3750
 $EndSCHEMATC
