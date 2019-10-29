@@ -1,16 +1,3 @@
-#define USBBUFTABLE ((volatile struct USBBufTable *)0x40006C00)
-#define USBBUFRAW ((volatile uint8_t *)0x40006C00)
-
-struct USBBufTable {
-  struct USBBufDesc {
-    uint16_t txBufferAddr ;
-    uint16_t txBufferCount ;
-    uint16_t rxBufferAddr ;
-    uint16_t rxBufferCount ;
-  }
-  ep_desc[8];
-};
-
 // Totally generic device descriptor
 char device_descriptor[] = {
   18,
@@ -60,7 +47,7 @@ char config_descriptor[] = {
 /*TX Endpoint Descriptor*/
   0x07,   /* bLength: Endpoint Descriptor size */
   5,   /* bDescriptorType: Endpoint */
-  0x81,   /* bEndpointAddress: (IN2) */
+  0x82,   /* bEndpointAddress: (IN2) */
   0x02,   /* bmAttributes: Bulk */
   64,     /* wMaxPacketSize: */
   0x00,

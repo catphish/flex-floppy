@@ -14,7 +14,7 @@ def send_command(handle, command, value = 0)
 end
 
 def read_data(handle)
-  handle.bulk_transfer(:endpoint => 0x81, :dataIn => 1024*1024, :timeout => 5000)
+  handle.bulk_transfer(:endpoint => 0x82, :dataIn => 1024*1024, :timeout => 5000)
 end
 
 def write_data(handle, data)

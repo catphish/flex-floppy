@@ -198,9 +198,9 @@ void floppy_main_loop() {
     if(free && free < 16) status = 2;
 
     // Check if we have data to send
-    if(usb_tx_ready(0x81)) {
+    if(usb_tx_ready(0x82)) {
       if((data_in_ptr >= (data_out_ptr + 32)) || (data_in_ptr < data_out_ptr)) {
-        usb_write(0x81, (char *)(data + data_out_ptr), 64);
+        usb_write_dbl(0x82, (char *)(data + data_out_ptr), 64);
         data_out_ptr = (data_out_ptr + 32) % MEMORY_SIZE;
       }
     }
@@ -218,13 +218,13 @@ void floppy_main_loop() {
 
   if(task == 0x22) { // Done reading, finish streaming.
     // Finish streaming data to USB
-    if(usb_tx_ready(0x81)) {
+    if(usb_tx_ready(0x82)) {
       if((data_in_ptr >= (data_out_ptr + 32)) || (data_in_ptr < data_out_ptr)) {
-        usb_write(0x81, (char *)(data + data_out_ptr), 64);
+        usb_write_dbl(0x82, (char *)(data + data_out_ptr), 64);
         data_out_ptr = (data_out_ptr + 32) % MEMORY_SIZE;
       } else {
         uint16_t remaining_data = data_in_ptr - data_out_ptr;
-        usb_write(0x81, (char *)(data + data_out_ptr), remaining_data * 2);
+        usb_write_dbl(0x82, (char *)(data + data_out_ptr), remaining_data * 2);
         task = 0x23;
         index_pulse_ptr = 0;
       }
@@ -232,21 +232,35 @@ void floppy_main_loop() {
   }
 
   if(task == 0x23) { // Done sending, send index pulse metadata
-    if(usb_tx_ready(0x81)) {
+    if(usb_tx_ready(0x82)) {
       if(index_pulse_ptr < MAX_INDEX_PULSES) {
-        usb_write(0x81, (char *)(index_pulses + index_pulse_ptr), 64);
+        usb_write_dbl(0x82, (char *)(index_pulses + index_pulse_ptr), 64);
         index_pulse_ptr += 8;
       } else {
-        usb_write(0x81, 0, 0);
+        usb_write_dbl(0x82, 0, 0);
         task = 0x24;
       }
     }
   }
 
   if(task == 0x24) { // Finally send the transfer status
-    if(usb_tx_ready(0x81)) {
-      usb_write(0x81, (char *)&status, 2);
+    if(usb_tx_ready(0x82)) {
+      usb_write_dbl(0x82, (char *)&status, 2);
       task = 0;
+    }
+  }
+
+  if(task == 0x31) {
+    if(usb_rx_ready(0x01)) {
+      // Receive data stream and pre-fill ring buffer
+      usb_read_dbl(0x01, (char *)(data + data_in_ptr));
+      data_in_ptr += 32;
+
+      if(data_in_ptr == MEMORY_SIZE) {
+        // Buffer full. Start writing.
+        data_in_ptr = 0;
+        floppy_really_start_write();
+      }
     }
   }
 
@@ -258,11 +272,18 @@ void floppy_main_loop() {
       // Advance to next task
       task = 0x33;
     }
+    if(usb_rx_ready(0x01)) {
+      // Receive data stream and continue to write disk
+      if((data_out_ptr >= (data_in_ptr + 32)) || (data_out_ptr < data_in_ptr)) {
+        usb_read_dbl(0x01, (char *)(data + data_in_ptr));
+        data_in_ptr = (data_in_ptr + 32) % MEMORY_SIZE;
+      }
+    }
   }
 
   if(task == 0x33) { // Confirm write status
-    if(usb_tx_ready(0x81)) {
-      usb_write(0x81, (char *)&status, 2);
+    if(usb_tx_ready(0x82)) {
+      usb_write_dbl(0x82, (char *)&status, 2);
       task = 0;
     }
   }
@@ -307,28 +328,6 @@ void floppy_handle_ep0(char * packet) {
   }
 }
 
-void floppy_handle_ep1() {
-  if(task == 0x31) {
-    // Receive data stream and pre-fill ring buffer
-    usb_read(0x01, (char *)(data + data_in_ptr));
-    data_in_ptr += 32;
-
-    if(data_in_ptr == MEMORY_SIZE) {
-      // Buffer full. Start writing.
-      data_in_ptr = 0;
-      floppy_really_start_write();
-    }
-  } else if(task == 0x32) {
-    // Receive data stream and continue to write disk
-    if((data_out_ptr >= (data_in_ptr + 32)) || (data_out_ptr < data_in_ptr)) {
-      usb_read(0x01, (char *)(data + data_in_ptr));
-      data_in_ptr = (data_in_ptr + 32) % MEMORY_SIZE;
-    }
-  } else {
-    usb_read(0x01, 0); // Discard
-  }
-}
-
 void TIM2_IRQHandler() {
   TIM2->SR = 0;
 
@@ -355,6 +354,7 @@ void TIM2_IRQHandler() {
       data_total_ptr++;
     }
   }
+
 }
 
 void EXTI9_5_IRQHandler() {

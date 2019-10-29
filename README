@@ -16,14 +16,10 @@ This project is a work in progress.
 Firmware TODO
 =============
 Begin writes on index pulse
+DMA
 
 Host TODO
 =========
 Proper CLI toolkit
 GUI
 USB protocol documentation
-
-Future development
-==================
-DMA
-USB double buffering
