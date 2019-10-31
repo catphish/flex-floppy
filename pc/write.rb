@@ -49,7 +49,7 @@ device.open_interface(0) do |handle|
 
     f.seek(track_offset + data_offset)
     data = f.read(bitcells*2).unpack('S>*')
-    data = data.pack('S<*')
+    data = data.pack('S<*') + "\0\0"
 
     # Seek track
     send_command(handle, COMMAND_SEEK_HEAD, track)
@@ -60,8 +60,7 @@ device.open_interface(0) do |handle|
       send_command(handle, COMMAND_WRITE_RAW)
 
       # Send data
-      #data = [160].pack('S<') * 62500
-      write_data(handle, data + "\0\0")
+      write_data(handle, data)
       status = read_data(handle)
       if status == "\1\0"
         break

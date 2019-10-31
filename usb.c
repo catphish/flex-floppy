@@ -7,6 +7,7 @@
 #include "floppy.h"
 
 uint8_t pending_addr = 0;
+uint8_t rx_rdy;
 
 void usb_init() {
   gpio_port_mode(GPIOA, 11, 2, 10, 0, 0); // A11 AF10
@@ -35,16 +36,16 @@ void usb_init() {
   usleep(10);
   // Activate DP pullup
   USB->BCDR |= USB_BCDR_DPPU;
+  rx_rdy = 0;
 }
 
 uint8_t usb_rx_ready(uint8_t ep) {
-  ep &= 0xf;
-  uint32_t epr = USB_EPR(ep);
-  if(epr & (1<<15))
-    return(1);
-  if((epr & 0x4000) != ((epr & 0x40) << 8))
-    return(1);
-  return(0);
+  // Use a dummy packet size to mark buffers as empty
+  if(USB_EPR(ep) & 0x40) {
+    return(USBBUFTABLE->ep_desc[ep].rxBufferCount != ((1<<15) | (1 << 10) | 0xff));
+  } else {
+    return(USBBUFTABLE->ep_desc[ep].txBufferCount != ((1<<15) | (1 << 10) | 0xff));
+  }
 }
 
 uint8_t usb_tx_ready(uint8_t ep) {
@@ -92,13 +93,13 @@ void usb_configure_ep(uint8_t ep, uint32_t type) {
 
   if(!in) {
     USBBUFTABLE->ep_desc[ep].rxBufferAddr = buffer_pointer;
-    USBBUFTABLE->ep_desc[ep].rxBufferCount = (1<<15) | (1 << 10);
+    USBBUFTABLE->ep_desc[ep].rxBufferCount = (1<<15) | (1 << 10) | 0xff;
     buffer_pointer += 64;
 
     if(dblbuf) {
       // Use TX buffer as additional RX buffer
       USBBUFTABLE->ep_desc[ep].txBufferAddr = buffer_pointer;
-      USBBUFTABLE->ep_desc[ep].txBufferCount = (1<<15) | (1 << 10);
+      USBBUFTABLE->ep_desc[ep].txBufferCount = (1<<15) | (1 << 10) | 0xff;
       buffer_pointer += 64;
       new_epr |= (old_epr & 0x4040); // DTOG=0, SW_BUF=0
     }
@@ -112,9 +113,8 @@ void usb_read(uint8_t ep, volatile char * buffer) {
   ep &= 0x7f;
   USB_EPR(ep) &= 0x078f;
   uint32_t rxBufferAddr = USBBUFTABLE->ep_desc[ep].rxBufferAddr;
-  uint32_t len = USBBUFTABLE->ep_desc[ep].rxBufferCount & 0x03ff;
   if(buffer) {
-    for(int n=0; n<len; n+=2) {
+    for(int n=0; n<64; n+=2) {
       *(uint16_t *)(buffer + n) = *(uint16_t *)(USBBUFRAW+rxBufferAddr+n);
     }
   }
@@ -124,26 +124,27 @@ void usb_read(uint8_t ep, volatile char * buffer) {
 
 void usb_read_dbl(uint8_t ep, volatile char * buffer) {
   ep &= 0x7f;
+  uint32_t epr = USB_EPR(ep);
+  uint32_t rxBufferAddr;
 
-  uint32_t len, rxBufferAddr;
-
-  if(USB_EPR(ep) & 0x40) {
+  // Use a dummy packet size to mark buffers as empty
+  if(epr & 0x40) {
     rxBufferAddr = USBBUFTABLE->ep_desc[ep].rxBufferAddr;
-    len = USBBUFTABLE->ep_desc[ep].rxBufferCount & 0xff;
+    USBBUFTABLE->ep_desc[ep].rxBufferCount = (1<<15) | (1 << 10) | 0xff;
   } else {
     rxBufferAddr = USBBUFTABLE->ep_desc[ep].txBufferAddr;
-    len = USBBUFTABLE->ep_desc[ep].txBufferCount & 0xff;
+    USBBUFTABLE->ep_desc[ep].txBufferCount = (1<<15) | (1 << 10) | 0xff;
   }
 
   if(buffer) {
-    for(int n=0; n<len; n+=2) {
+    for(int n=0; n<64; n+=2) {
       *(uint16_t *)(buffer + n) = *(uint16_t *)(USBBUFRAW+rxBufferAddr+n);
     }
   }
-  // Clear flag
-  USB_EPR(ep) &= 0x078f;
   // Toggle SW_BUF
-  USB_EPR(ep) = (USB_EPR(ep) & 0x878f) | 0x40;
+  epr &= 0x070f;
+  epr |= 0x80c0;
+  USB_EPR(ep) = epr;
 }
 
 void usb_write(uint8_t ep, volatile char * buffer, uint32_t len) {

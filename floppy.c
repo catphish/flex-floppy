@@ -265,13 +265,6 @@ void floppy_main_loop() {
   }
 
   if(task == 0x32) { // Writing
-    if(status) {
-      // Disable TIM2 and interrupts
-      TIM2->CR1   = 0;
-      TIM2->DIER  = 0;
-      // Advance to next task
-      task = 0x33;
-    }
     if(usb_rx_ready(0x01)) {
       // Receive data stream and continue to write disk
       if((data_out_ptr >= (data_in_ptr + 32)) || (data_out_ptr < data_in_ptr)) {
@@ -279,12 +272,25 @@ void floppy_main_loop() {
         data_in_ptr = (data_in_ptr + 32) % MEMORY_SIZE;
       }
     }
+    if(status) {
+      // Disable TIM2 and interrupts
+      TIM2->CR1   = 0;
+      TIM2->DIER  = 0;
+      // Advance to next task
+      task = 0x33;
+    }
   }
 
   if(task == 0x33) { // Confirm write status
     if(usb_tx_ready(0x82)) {
       usb_write_dbl(0x82, (char *)&status, 2);
       task = 0;
+    }
+  }
+
+  if(task == 0x33 || task == 0) {
+    if(usb_rx_ready(0x01)) {
+      usb_read_dbl(0x01, 0); // Discard
     }
   }
 }
