@@ -136,13 +136,9 @@ void floppy_start_read() {
   task   = 0x21;
   status = 0;
 
-  // Enable EXTI
+  // Enable EXTI and TIM2
   EXTI->IMR1 = (1<<8);
-
-  // Reset interrupts and enable TIM2
-  TIM2->SR    = 0;
   TIM2->CR1   = 1;
-  TIM2->DIER  = (1<<3);
 }
 
 void floppy_start_write() {
@@ -172,7 +168,8 @@ void floppy_start_write() {
 
 void floppy_really_start_write() {
   // Set current task
-  task   = 0x32;
+  EXTI->IMR1 = 0;
+  task   = 0x33;
 
   // Arm the death ray
   floppy_write_enable();
@@ -190,7 +187,7 @@ void floppy_really_start_write() {
 void floppy_main_loop() {
   if(task == 0x21) { // Reading
     // Stop reading after fixed interval
-    if(TIM2->CNT >= read_length) status = 1;
+    if(TIM2->CNT >= ((read_length+2)*16000000)) status = 3;
 
     // Check if we're approaching an overflow
     int32_t free = (int32_t)data_out_ptr - (int32_t)data_in_ptr;
@@ -259,12 +256,14 @@ void floppy_main_loop() {
       if(data_in_ptr == MEMORY_SIZE) {
         // Buffer full. Start writing.
         data_in_ptr = 0;
-        floppy_really_start_write();
+        // Wait for INDEX (EXTI)
+        task = 0x32;
+        EXTI->IMR1 = (1<<8);
       }
     }
   }
 
-  if(task == 0x32) { // Writing
+  if(task == 0x33) { // Writing
     if(usb_rx_ready(0x01)) {
       // Receive data stream and continue to write disk
       if((data_out_ptr >= (data_in_ptr + 32)) || (data_out_ptr < data_in_ptr)) {
@@ -277,18 +276,18 @@ void floppy_main_loop() {
       TIM2->CR1   = 0;
       TIM2->DIER  = 0;
       // Advance to next task
-      task = 0x33;
+      task = 0x34;
     }
   }
 
-  if(task == 0x33) { // Confirm write status
+  if(task == 0x34) { // Confirm write status
     if(usb_tx_ready(0x82)) {
       usb_write_dbl(0x82, (char *)&status, 2);
       task = 0;
     }
   }
 
-  if(task == 0x33 || task == 0) {
+  if(task == 0x34 || task == 0) {
     if(usb_rx_ready(0x01)) {
       usb_read_dbl(0x01, 0); // Discard
     }
@@ -323,7 +322,7 @@ void floppy_handle_ep0(char * packet) {
   }
   // Read Track
   if(bRequest == 0x21) {
-    read_length  = (uint32_t)packet[2] * 1000000;
+    read_length  = (uint32_t)packet[2];
     floppy_start_read();
     usb_write(0,0,0);
   }
@@ -337,7 +336,7 @@ void floppy_handle_ep0(char * packet) {
 void TIM2_IRQHandler() {
   TIM2->SR = 0;
 
-  if(task == 0x32) { // Write to TIM2->ARR
+  if(task == 0x33) { // Write to TIM2->ARR
     uint16_t t = data[data_out_ptr];
     if(t) {
       TIM2->ARR = t;
@@ -366,10 +365,18 @@ void TIM2_IRQHandler() {
 void EXTI9_5_IRQHandler() {
   // Acknowledge interrupt
   EXTI->PR1 = (1<<8);
+  if(task == 0x21 && TIM2->DIER == 0) {
+    // Reset interrupts and enable TIM2
+    TIM2->SR    = 0;
+    TIM2->DIER  = (1<<3);
+  }
+  if(task == 0x32) floppy_really_start_write();
+
   // INDEX pulse detected
   if(index_pulse_ptr < MAX_INDEX_PULSES) {
     index_pulses[index_pulse_ptr].time = TIM2->CNT;
     index_pulses[index_pulse_ptr].data_ptr = data_total_ptr;
     index_pulse_ptr++;
+    if(index_pulse_ptr == (read_length+1)) status = 1;
   }
 }

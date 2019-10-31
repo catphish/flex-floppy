@@ -19,7 +19,7 @@ end
 
 start_track  = 0
 end_track    = 159
-revolutions  = 2
+revolutions  = 1
 
 usb = LIBUSB::Context.new
 device = usb.devices(idVendor: 0x1209, idProduct: 0x0001).first
@@ -65,7 +65,7 @@ device.open_interface(0) do |handle|
     loop do
       # Read 8M (40MHz) cycles per revolution
       # Read one additional revolution to allow index alignment
-      send_command(handle, COMMAND_READ_RAW, 8 * (revolutions + 1))
+      send_command(handle, COMMAND_READ_RAW, revolutions)
 
       # Receive data stream
       track_data = read_data(handle)
