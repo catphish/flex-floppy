@@ -3,3 +3,4 @@
 *.o
 pc/*.adf
 pc/*.scp
+pc/*.ipf

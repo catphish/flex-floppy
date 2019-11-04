@@ -1,4 +1,4 @@
-=================================
+========== FlexFloppy ===========
 USB Multi-pupose Floppy Interface
 =================================
 
@@ -15,10 +15,10 @@ This project is a work in progress.
 
 Firmware TODO
 =============
-DMA
+Terminate write on index pulse
+Timeout on missing index pulse during write
 
 Host TODO
 =========
 Proper CLI toolkit
 GUI
-USB protocol documentation
