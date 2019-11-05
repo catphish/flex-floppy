@@ -73,7 +73,7 @@ value of 0x0000.
 
 A buffer will be filled then writing will begin on the next index pulse.
 Writing will end when the last timing value has been processed or the
-next index pulse occurs(**), whichever occurs first.
+next index pulse occurs, whichever occurs first.
 
 After the transfer has completed, a 2-byte status code will be returned on
 EP 0x82.

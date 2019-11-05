@@ -15,7 +15,6 @@ This project is a work in progress.
 
 Firmware TODO
 =============
-Terminate write on index pulse
 Timeout on missing index pulse during write
 
 Host TODO

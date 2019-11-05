@@ -145,6 +145,7 @@ void floppy_start_write() {
   // Disable TIM2 and interrupts
   TIM2->CR1   = 0;
   TIM2->DIER  = 0;
+  TIM2->SR = 0;
 
   // Set prescaler
   TIM2->PSC   = 1;
@@ -365,18 +366,29 @@ void TIM2_IRQHandler() {
 void EXTI9_5_IRQHandler() {
   // Acknowledge interrupt
   EXTI->PR1 = (1<<8);
-  if(task == 0x21 && TIM2->DIER == 0) {
-    // Reset interrupts and enable TIM2
-    TIM2->SR    = 0;
-    TIM2->DIER  = (1<<3);
+
+  // Stop writing on index pulse!
+  if(task == 0x33) {
+    floppy_write_disable();
+    status = 1;
   }
+
+  // Start writing on index pulse!
   if(task == 0x32) floppy_really_start_write();
 
-  // INDEX pulse detected
-  if(index_pulse_ptr < MAX_INDEX_PULSES) {
-    index_pulses[index_pulse_ptr].time = TIM2->CNT;
-    index_pulses[index_pulse_ptr].data_ptr = data_total_ptr;
-    index_pulse_ptr++;
-    if(index_pulse_ptr == (read_length+1)) status = 1;
+  // Record index pulses during read
+  if(task == 0x21) {
+    if(TIM2->DIER == 0) {
+      // Reset interrupts and enable TIM2 to strt reading
+      TIM2->SR    = 0;
+      TIM2->DIER  = (1<<3);
+    }
+    // INDEX pulse detected
+    if(index_pulse_ptr < MAX_INDEX_PULSES) {
+      index_pulses[index_pulse_ptr].time = TIM2->CNT;
+      index_pulses[index_pulse_ptr].data_ptr = data_total_ptr;
+      index_pulse_ptr++;
+      if(index_pulse_ptr == (read_length+1)) status = 1;
+    }
   }
 }
