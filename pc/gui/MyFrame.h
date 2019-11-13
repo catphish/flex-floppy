@@ -2,15 +2,16 @@
 #ifndef WX_PRECOMP
     #include <wx/wx.h>
 #endif
+#include <string>
 
 class MyFrame: public wxFrame
 {
 public:
     MyFrame(const wxString& title, const wxPoint& pos, const wxSize& size);
 private:
-    void OnHello(wxCommandEvent& event);
     void OnExit(wxCommandEvent& event);
-    void OnAbout(wxCommandEvent& event);
-		void OnMyThread(wxCommandEvent& event);
+		void StartRead(wxCommandEvent& event);
+		void OnUSBStatus(wxCommandEvent& event);
+		void OnUSBAlert(wxCommandEvent& event);
     wxDECLARE_EVENT_TABLE();
 };
