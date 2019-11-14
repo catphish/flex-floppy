@@ -2,6 +2,8 @@
 
 wxDEFINE_EVENT(wxEVT_USBALERT, wxCommandEvent);
 wxDEFINE_EVENT(wxEVT_USBSTATUS, wxCommandEvent);
+wxDEFINE_EVENT(wxEVT_USBTRACKSUCCESS, wxCommandEvent);
+wxDEFINE_EVENT(wxEVT_USBTRACKFAILURE, wxCommandEvent);
 
 USBThread::USBThread(wxEvtHandler* pParent) : wxThread(wxTHREAD_DETACHED), m_pParent(pParent){}
 
@@ -57,6 +59,7 @@ void USBThread::ReadData()
 		libusb_bulk_transfer(handle, 0x82, buffer_i, 1024, &transferred, 2000);
 		libusb_bulk_transfer(handle, 0x82, buffer_s, 1024, &transferred, 2000);
 		printf("STATUS: %i %i\n", buffer_s[0], buffer_s[1]);
+		TrackSuccess(track);
 		if(aborted) break;
 	}
 	free(buffer_d); free(buffer_i); free(buffer_s);
@@ -80,5 +83,11 @@ void USBThread::Status(const char* message)
 		printf("%s\n", message);
 	  wxCommandEvent evt(wxEVT_USBSTATUS);
 	  evt.SetString(message);
+	  wxPostEvent(m_pParent, evt);
+}
+void USBThread::TrackSuccess(int track)
+{
+	  wxCommandEvent evt(wxEVT_USBTRACKSUCCESS);
+	  evt.SetInt(track);
 	  wxPostEvent(m_pParent, evt);
 }

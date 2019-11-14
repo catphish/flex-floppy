@@ -11,7 +11,9 @@ int hotplug_callback(struct libusb_context *ctx, struct libusb_device *dev,
 
 BEGIN_DECLARE_EVENT_TYPES()
 	wxDECLARE_EVENT(wxEVT_USBALERT, wxCommandEvent);
-	wxDECLARE_EVENT(wxEVT_USBSTATUS, wxCommandEvent);
+  wxDECLARE_EVENT(wxEVT_USBSTATUS, wxCommandEvent);
+  wxDECLARE_EVENT(wxEVT_USBTRACKSUCCESS, wxCommandEvent);
+  wxDECLARE_EVENT(wxEVT_USBTRACKFAILURE, wxCommandEvent);
 END_DECLARE_EVENT_TYPES()
 
 class USBThread : public wxThread
@@ -26,6 +28,7 @@ class USBThread : public wxThread
   private:
   	void Status(const char* message);
   	void Alert(const char* message);
+    void TrackSuccess(int track);
     bool aborted;
   	libusb_device_handle* handle;
 };
