@@ -13,6 +13,7 @@ struct USBBufTable {
 #define USB_EPR(n) (*(volatile uint16_t *)(USB_BASE + 4 * n))
 
 void usb_init();
+void usb_configure_ep(uint8_t ep, uint32_t type);
 void usb_main_loop();
 uint8_t usb_rx_ready(uint8_t ep);
 uint8_t usb_tx_ready(uint8_t ep);

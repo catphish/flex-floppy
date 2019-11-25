@@ -17,28 +17,27 @@ char config_descriptor[] = {
 /*Configuation Descriptor*/
   0x09,   /* bLength: Configuation Descriptor size */
   2,      /* bDescriptorType: Configuration */
-  9+9+7+7,     /* wTotalLength:no of returned bytes */
+  9+9+7+7,/* wTotalLength:no of returned bytes */
   0x00,
   0x01,   /* bNumInterfaces: 2 interface */
   0x01,   /* bConfigurationValue: Configuration value */
   0x00,   /* iConfiguration: Index of string descriptor describing the configuration */
   0x80,   /* bmAttributes: bus powered */
   50,     /* MaxPower 100 mA */
+
 /*Interface Descriptor*/
   0x09,   /* bLength: Interface Descriptor size */
   4,      /* bDescriptorType: Interface */
-                  /* Interface descriptor type */
   0x00,   /* bInterfaceNumber: Number of Interface */
   0x00,   /* bAlternateSetting: Alternate setting */
   0x02,   /* bNumEndpoints: Endpoints used */
-  0xff,   /* bInterfaceClass: Custom */
-  0x00,   /* bInterfaceSubClass: - */
-  0x00,   /* bInterfaceProtocol: - */
+  0x08,   /* bInterfaceClass: Custom */
+  0x06,   /* bInterfaceSubClass: - */
+  0x50,   /* bInterfaceProtocol: - */
   0x00,   /* iInterface: */
-
 /*RX Endpoint Descriptor*/
   0x07,   /* bLength: Endpoint Descriptor size */
-  5,   /* bDescriptorType: Endpoint */
+  5,      /* bDescriptorType: Endpoint */
   0x01,   /* bEndpointAddress: (OUT1) */
   0x02,   /* bmAttributes: Bulk */
   64,     /* wMaxPacketSize: */
@@ -46,8 +45,8 @@ char config_descriptor[] = {
   0x00,   /* bInterval: */
 /*TX Endpoint Descriptor*/
   0x07,   /* bLength: Endpoint Descriptor size */
-  5,   /* bDescriptorType: Endpoint */
-  0x82,   /* bEndpointAddress: (IN2) */
+  5,      /* bDescriptorType: Endpoint */
+  0x81,   /* bEndpointAddress: (IN1) */
   0x02,   /* bmAttributes: Bulk */
   64,     /* wMaxPacketSize: */
   0x00,
