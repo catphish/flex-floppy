@@ -77,7 +77,7 @@ uint32_t ep_rx_ready(uint32_t ep) {
   return((USB_EPR(ep) & 0x3000) == 0x2000);
 }
 
-void usb_read(uint8_t ep, volatile char * buffer) {
+void usb_read(uint8_t ep, char * buffer) {
   ep &= 0x7f;
   while(!ep_rx_ready(ep));
   uint32_t rxBufferAddr = USBBUFTABLE->ep_desc[ep].rxBufferAddr;
@@ -90,12 +90,12 @@ void usb_read(uint8_t ep, volatile char * buffer) {
   USB_EPR(ep) = (USB_EPR(ep) & 0x370f) ^ 0x3000;
 }
 
-void usb_write(uint8_t ep, volatile char * buffer, uint32_t len) {
+void usb_write(uint8_t ep, char * buffer, uint32_t len) {
   ep &= 0x7f;
   while(!ep_tx_ready(ep));
   uint32_t txBufferAddr = USBBUFTABLE->ep_desc[ep].txBufferAddr;
   for(int n=0; n<len; n+=2) {
-    *(volatile uint16_t *)(USBBUFRAW+txBufferAddr+n) = *(uint16_t *)(buffer + n);
+    *(uint16_t *)(USBBUFRAW+txBufferAddr+n) = *(uint16_t *)(buffer + n);
   }
   USBBUFTABLE->ep_desc[ep].txBufferCount = len;
 

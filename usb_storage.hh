@@ -8,9 +8,9 @@ char scsi_descriptor[] = {
 };
 
 char scsi_capacity[] = {
-  0,0,6,224, // 160 tracks * 11 sectors
+  0,0,6,223, // 160 tracks * 11 sectors -1
   0,0,2,0    // 512 byte sectors
 };
 char scsi_mode_sense[] = {
-  3,0,0,0
+  3,0,0x80,0
 };

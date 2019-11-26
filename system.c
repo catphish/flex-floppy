@@ -1,8 +1,6 @@
 #include <stm32l433xx.h>
 #include "usb.h"
 
-#define nop()  __asm__ __volatile__ ("nop" ::)
-
 void SystemInitError(uint8_t error_source) {
   while(1);
 }

@@ -35,7 +35,6 @@ struct sense_data {
   uint8_t  sense_key_specific[3];
 } __attribute__((packed));
 
-void usb_storage_write_stream(volatile char * buffer, uint32_t len);
-void usb_storage_terminate_stream();
+void usb_storage_write_stream(char * buffer, uint32_t len, uint8_t terminate);
 void usb_storage_scsi_respond_status(uint32_t tag, uint8_t status, uint8_t sense_key, uint8_t additional_sense_code, uint8_t additional_sense_code_qualifier);
 void usb_storage_handle_ep1();
