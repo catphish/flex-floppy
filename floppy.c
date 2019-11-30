@@ -36,25 +36,23 @@ void floppy_init() {
 
   cached_track = -1;
   headpos = -1;
-
-  floppy_enable();
 }
 
 void floppy_track_minus() {
   GPIOB->BSRR = (1<<13);
   GPIOB->BSRR = (1<<(16+12));
-  msleep(10);
+  msleep(2);
   GPIOB->BSRR = (1<<12);
-  msleep(10);
+  msleep(2);
   headpos--;
 }
 
 void floppy_track_plus() {
   GPIOB->BSRR = (1<<(16+13));
   GPIOB->BSRR = (1<<(16+12));
-  msleep(10);
+  msleep(2);
   GPIOB->BSRR = (1<<12);
-  msleep(10);
+  msleep(2);
   headpos++;
 }
 
@@ -99,6 +97,7 @@ void start_timer() {
 }
 
 char * floppy_read_sector(uint16_t block) {
+  floppy_enable();
   uint16_t track  = block / 11;
   uint16_t sector = block % 11;
   
@@ -121,7 +120,7 @@ char * floppy_read_sector(uint16_t block) {
   TIM2->SR = 0;
 
   while(1) {
-    if(TIM2->CNT > 50000000) {
+    if(TIM2->CNT > 80000000) {
       // 1-second timeout
       return 0; // Read error
     }
