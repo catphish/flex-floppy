@@ -11,6 +11,8 @@ uint8_t cached_track;
 
 struct sector sectors[11];
 struct sector * ordered_sectors[11];
+char write_data[11][1088];
+char floppy_enabled;
 
 void floppy_init() {
   // TIM2
@@ -36,6 +38,7 @@ void floppy_init() {
 
   cached_track = -1;
   headpos = -1;
+  floppy_enabled = 0;
 }
 
 void floppy_track_minus() {
@@ -45,6 +48,7 @@ void floppy_track_minus() {
   GPIOB->BSRR = (1<<12);
   msleep(2);
   headpos--;
+  GPIOB->BSRR = (1<<(16+13));
 }
 
 void floppy_track_plus() {
@@ -76,16 +80,22 @@ void floppy_track_seek(uint8_t target) {
 void floppy_enable() {
   GPIOB->BSRR = (1<<(16+15)); // Enable
   GPIOB->BSRR = (1<<(16+14)); // Motor on
+  floppy_enabled = 1;
 }
 void floppy_disable() {
   GPIOB->BSRR = (1<<(14)); // Motor off
   GPIOB->BSRR = (1<<(15)); // Disable
+  floppy_enabled = 0;
 }
 void floppy_write_enable() {
   GPIOB->BSRR = (1<<(16+2)); // Write enable!
 }
 void floppy_write_disable() {
   GPIOB->BSRR = (1<<(2));    // Write disable!
+}
+
+uint8_t floppy_write_protect() {
+  return(!(GPIOB->IDR & (1<<1)));
 }
 
 void start_timer() {
@@ -96,8 +106,23 @@ void start_timer() {
   TIM2->CR1   = 1;
 }
 
+void start_timer_write() {
+  TIM2->CR1   = 0;
+  // Configure TIM2 CH4 as PWM output (mode 1)
+  TIM2->CCMR2 = (6<<12);
+  TIM2->CCER  = (1<<12) | (1<<13);
+  TIM2->CNT   = 0;
+  TIM2->CCR4  = 160; // 2us pulse
+  TIM2->ARR   = 0xffffffff;
+  TIM2->SR    = 0;
+  TIM2->CR1   = 1;
+}
+
 char * floppy_read_sector(uint16_t block) {
-  floppy_enable();
+  if(!floppy_enabled) {
+    floppy_enable();
+    msleep(500);
+  }
   uint16_t track  = block / 11;
   uint16_t sector = block % 11;
   
@@ -111,6 +136,8 @@ char * floppy_read_sector(uint16_t block) {
 
   if(headpos == -1) floppy_track_zero();
   floppy_track_seek(track);
+  msleep(10);
+
   uint32_t sector_bitmap = 0;
   struct sector * current_sector = sectors;
 
@@ -201,4 +228,102 @@ char * floppy_read_sector(uint16_t block) {
     }
   }
 
+}
+
+void floppy_write_sector(uint16_t block, char * sector_data) {
+  cached_track = -1;
+  uint16_t track  = block / 11;
+  uint16_t sector = block % 11;
+
+  // Lead-in
+  write_data[sector][0] = 0xAA;
+  write_data[sector][1] = 0xAA;
+  write_data[sector][2] = 0xAA;
+  write_data[sector][3] = 0xAA;
+
+  // Sync
+  write_data[sector][4] = 0x44;
+  write_data[sector][5] = 0x89;
+  write_data[sector][6] = 0x44;
+  write_data[sector][7] = 0x89;
+
+  // Header
+  write_data[sector][8]  = (0xff >> 1) & 0x55;
+  write_data[sector][12] = (0xff >> 0) & 0x55;
+  write_data[sector][9]  = (track >> 1) & 0x55;
+  write_data[sector][13] = (track >> 0) & 0x55;
+  write_data[sector][10] = (sector >> 1) & 0x55;
+  write_data[sector][14] = (sector >> 0) & 0x55;
+  write_data[sector][11] = ((11-sector) >> 1) & 0x55;
+  write_data[sector][15] = ((11-sector) >> 0) & 0x55;
+
+  // Sector label, empty
+  for(int n=16; n<48; n++)
+    write_data[sector][n] = 0;
+
+  // Data
+  for(int n=0; n<512; n++) {
+    write_data[sector][64+n]  = (sector_data[n] >> 1) & 0x55;
+    write_data[sector][576+n] = (sector_data[n] >> 0) & 0x55;
+  }
+
+  // Calculate checksums
+  uint32_t header_checksum = 0;
+    for(int n=8; n<48; n+=4)
+      header_checksum ^= *(uint32_t*)(write_data[sector] + n);
+  uint32_t data_checksum = 0;
+    for(int n=64; n<1088; n+=4) {
+      data_checksum ^= *(uint32_t*)(write_data[sector] + n);
+    }
+  // Odd header checksum, empty
+  for(int n=48; n<52; n++) write_data[sector][n] = 0;
+  // Even header checksum
+  *(uint32_t*)(write_data[sector] + 52) = header_checksum;
+
+  // Odd data checksum, empty
+  for(int n=56; n<60; n++) write_data[sector][n] = 0;
+  // Even data checksum
+  *(uint32_t*)(write_data[sector] + 60) = data_checksum;
+
+  int previous_bit = 1;
+  for(int byte=8; byte<1088; byte++) {
+    for(int bit=6; bit>=0; bit-=2) {
+      if(!(write_data[sector][byte] & (1<<bit)))
+        if(!previous_bit)
+          write_data[sector][byte] |= (2<<bit);
+      previous_bit = write_data[sector][byte] & (1<<bit);
+    }
+  }
+
+  if(sector == 10) {
+    // For now, lets write a track any time we receive the last sector
+    if(!floppy_enabled) {
+      floppy_enable();
+      msleep(500);
+    }
+    if(headpos == -1) floppy_track_zero();
+    floppy_track_seek(track);
+    msleep(10);
+    start_timer_write();
+    floppy_write_enable();
+    // Start with 25ms with no transitions
+    TIM2->ARR = 2000000;
+    for(int sec=0; sec<11; sec++) {
+      for(int byte=0; byte<1088; byte++) {
+        for(int bit=7; bit>=0; bit--) {
+          if(write_data[sec][byte] & (1<<bit)) {
+            while(!(TIM2->SR & 1));
+            TIM2->SR = 0;
+            TIM2->ARR = 160;
+          } else {
+            TIM2->ARR += 160;
+          }
+        }
+      }
+    }
+    while(!(TIM2->SR & 1));
+    usleep(100);
+    floppy_write_disable();
+    TIM2->ARR = 0xFFFFFFFF;
+  }
 }

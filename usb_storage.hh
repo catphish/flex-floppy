@@ -12,5 +12,6 @@ char scsi_capacity[] = {
   0,0,2,0    // 512 byte sectors
 };
 char scsi_mode_sense[] = {
-  3,0,0x80,0
+  //3,0,0x80,0
+  3,0,0x00,0
 };

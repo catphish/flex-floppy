@@ -74,9 +74,9 @@ void usb_storage_handle_ep1() {
       // READ
       start_block = (command->data[2] << 24) | (command->data[3] << 16) | (command->data[4] << 8) | (command->data[5]);
       length = (command->data[7] << 8) | command->data[8];
-      for(int n=start_block; n<start_block + length; n++) {
+      for(int block=start_block; block<start_block + length; block++) {
         char * sector_data;
-        sector_data = floppy_read_sector(n);
+        sector_data = floppy_read_sector(block);
         if(sector_data)
           usb_storage_write_stream(sector_data, 512, 0);
         else {
@@ -86,6 +86,18 @@ void usb_storage_handle_ep1() {
         }
       }
       usb_storage_write_stream(0,0,1);
+      usb_storage_scsi_respond_status(command->tag, 0,0,0,0);
+      break;
+    case 0x2A:
+      // Write
+      start_block = (command->data[2] << 24) | (command->data[3] << 16) | (command->data[4] << 8) | (command->data[5]);
+      length = (command->data[7] << 8) | command->data[8];
+      for(int block=start_block; block<start_block + length; block++) {
+        char sector_data[512];
+        for(int n=0; n<512; n+= 64)
+          usb_read(1, sector_data + n);
+        floppy_write_sector(block, sector_data);
+      }
       usb_storage_scsi_respond_status(command->tag, 0,0,0,0);
       break;
     case 0x00: // CHECK UNIT READY

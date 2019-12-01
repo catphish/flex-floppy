@@ -19,5 +19,7 @@ void floppy_enable();
 void floppy_disable();
 void floppy_write_enable();
 void floppy_write_disable();
+uint8_t floppy_write_protect();
 void start_timer();
 char * floppy_read_sector(uint16_t block);
+void floppy_write_sector(uint16_t block, char * sector_data);
