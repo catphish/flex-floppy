@@ -103,6 +103,11 @@ void usb_write(uint8_t ep, char * buffer, uint32_t len) {
   USB_EPR(ep) = (USB_EPR(ep) & 0x87bf) ^ 0x30;
 }
 
+void usb_stall_tx(uint8_t ep) {
+  ep &= 0x7f;
+  USB_EPR(ep) = (USB_EPR(ep) & 0x87bf) ^ 0x10;
+}
+
 void usb_reset() {
   USB->ISTR &= ~USB_ISTR_RESET;
 

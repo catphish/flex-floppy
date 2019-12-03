@@ -49,11 +49,17 @@ void usb_storage_handle_ep1() {
       // INQUIRY
       if(command->data[1] & 3 || command->data[2]) {
         // Return error on EVPD and other optional fields
+        usb_storage_write_stream(0,0,1);
         usb_storage_scsi_respond_status(command->tag, 1,5,0x24,0);
       } else {
         usb_storage_write_stream(scsi_descriptor, MIN(36, allocation_length), 1);
         usb_storage_scsi_respond_status(command->tag, 0,0,0,0);
       }
+      break;
+    case 0x23:
+      // READ FORMAT CAPACITIES (Windows requests this)
+      usb_storage_write_stream(scsi_format_capacities, sizeof(scsi_format_capacities), 1);
+      usb_storage_scsi_respond_status(command->tag, 0,0,0,0);
       break;
     case 0x25:
       // READ CAPACITY
@@ -85,7 +91,7 @@ void usb_storage_handle_ep1() {
           return;
         }
       }
-      usb_storage_write_stream(0,0,1);
+      //usb_storage_write_stream(0,0,1);
       usb_storage_scsi_respond_status(command->tag, 0,0,0,0);
       break;
     case 0x2A:

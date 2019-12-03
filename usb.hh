@@ -6,7 +6,7 @@ char device_descriptor[] = {
   0, 0, 0,
   64,
   0x09,0x12,
-  0x01,0x00,
+  0xDD,0xAF,
   0,1,
   0,0,0,
   1

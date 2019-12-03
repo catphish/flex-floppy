@@ -19,5 +19,6 @@ uint8_t usb_rx_ready(uint8_t ep);
 uint8_t usb_tx_ready(uint8_t ep);
 void usb_read(uint8_t ep, char * buffer);
 void usb_write(uint8_t ep, char * buffer, uint32_t len);
+void usb_stall_tx(uint8_t ep);
 void usb_read_dbl(uint8_t ep, char * buffer);
 void usb_write_dbl(uint8_t ep, char * buffer, uint32_t len);
